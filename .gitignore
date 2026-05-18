@@ -1,0 +1,36 @@
+# Ambiente virtual Python
+venv/
+.venv/
+env/
+
+# Bytecode e caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Variáveis de ambiente (credenciais)
+.env
+.env.local
+.env.*.local
+
+# IDEs e SO
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+Desktop.ini
+
+# Logs e bases locais
+*.log
+*.sqlite
+*.db
