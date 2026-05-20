@@ -16,6 +16,7 @@ API REST de **ponto de venda (PDV)** para gestão de vendas, caixa, estoque e re
 | Componente | Tecnologia |
 |------------|------------|
 | Framework web | [FastAPI](https://fastapi.tiangolo.com/) |
+| Frontend | HTML, CSS e JavaScript (SPA servida pelo FastAPI) |
 | Validação | Pydantic |
 | ORM | SQLAlchemy |
 | Banco de dados | PostgreSQL (driver `psycopg2`) |
@@ -62,6 +63,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 - Documentação interativa (Swagger): `http://127.0.0.1:8000/docs`
+- **Interface web (PDV)**: `http://127.0.0.1:8000/`
 - Esquema OpenAPI em JSON: `http://127.0.0.1:8000/openapi.json`
 
 ## Autenticação
@@ -83,6 +85,10 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 LarDoceLar/
 ├── main.py              # Aplicação FastAPI e rotas
+├── frontend/            # Interface web (PDV)
+│   ├── index.html
+│   ├── css/app.css
+│   └── js/
 ├── database/
 │   └── connection.py   # Engine SQLAlchemy e sessão
 └── models/             # Modelos ORM (usuários, pedidos, produtos, caixa, estoque, etc.)

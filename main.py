@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from hashlib import sha256
 from uuid import uuid4
 
@@ -10,13 +10,22 @@ from sqlalchemy.orm import Session
 from database.connection import Base, SessionLocal, engine
 from models.cash_session import CashSession
 from models.cash_flow import CashFlow
-from models.estoque import Estoque
 from models.order_items import OrderItem
 from models.orders import Order
 from models.product import Product
 from models.user import User
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
 app = FastAPI(title="LarDoceLar PDV")
+
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+@app.get("/")
+def serve_frontend():
+    return FileResponse("frontend/index.html")
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -106,6 +115,9 @@ class UpdateItemRequest(BaseModel):
     quantity: int = Field(gt=0)
 
 
+class OrderCreate(BaseModel):
+    customer_name: str
+
 class CheckoutRequest(BaseModel):
     payment_method: str
     amount_received: float = Field(gt=0)
@@ -117,6 +129,10 @@ class CashOpenRequest(BaseModel):
 
 class CashCloseRequest(BaseModel):
     closing_amount: float = Field(ge=0)
+    password: str | None = None
+
+class PayInvoiceRequest(BaseModel):
+    payment_method: str
 
 
 class CashMovementRequest(BaseModel):
@@ -134,6 +150,13 @@ class StockAdjustRequest(BaseModel):
 
 class AuditRequest(BaseModel):
     reason: str = Field(min_length=5, max_length=200)
+
+
+@app.get("/users")
+def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_roles(current_user, {"admin"})
+    users = db.query(User).all()
+    return [{"id": u.id, "name": u.name, "role": u.role} for u in users]
 
 
 @app.post("/users")
@@ -250,9 +273,11 @@ def deactivate_product(
 
 
 @app.post("/orders")
-def create_order(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_order(data: OrderCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_roles(current_user, {"admin", "cashier"})
-    new_order = Order(status="ABERTO", total=0)
+    session = get_open_cash_session(db)
+    session_id = session.id if session else None
+    new_order = Order(status="ABERTO", total=0, customer_name=data.customer_name, cash_session_id=session_id)
     db.add(new_order)
     db.commit()
     db.refresh(new_order)
@@ -266,7 +291,10 @@ def list_orders(
     current_user: User = Depends(get_current_user),
 ):
     require_roles(current_user, {"admin", "cashier"})
-    query = db.query(Order)
+    session = get_open_cash_session(db)
+    if not session:
+        return []
+    query = db.query(Order).filter(Order.cash_session_id == session.id)
     if status:
         query = query.filter(Order.status == status.upper())
     return query.order_by(Order.id.desc()).all()
@@ -285,6 +313,7 @@ def get_order(
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
     return {
         "id": current.id,
+        "customer_name": current.customer_name,
         "status": current.status,
         "total": current.total,
         "items": items,
@@ -414,28 +443,25 @@ def checkout_order(
         raise HTTPException(status_code=400, detail="Valor recebido menor que o total")
 
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
-    for item in items:
-        stock = db.query(Estoque).filter(Estoque.product_id == item.product_id).first()
-        if stock is None or stock.quantity < item.quantity:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Estoque insuficiente para produto {item.product_id}",
-            )
-    for item in items:
-        stock = db.query(Estoque).filter(Estoque.product_id == item.product_id).first()
-        stock.quantity -= item.quantity
 
     current_order.status = "FECHADO"
-    db.add(
-        CashFlow(
-            order_id=current_order.id,
-            cash_session_id=session.id,
-            type="ENTRADA",
-            amount=total,
-            description=f"Venda pedido {current_order.id} (sessao {session.id})",
-            payment_method=data.payment_method.upper(),
+    current_order.payment_method = data.payment_method.upper()
+
+    if current_order.payment_method == "FATURADO":
+        current_order.payment_status = "PENDENTE"
+    else:
+        current_order.payment_status = "PAGO"
+        db.add(
+            CashFlow(
+                order_id=current_order.id,
+                cash_session_id=session.id,
+                type="ENTRADA",
+                amount=total,
+                description=f"Venda pedido {current_order.id} (sessao {session.id})",
+                payment_method=current_order.payment_method,
+            )
         )
-    )
+        
     db.commit()
     return {"message": "Pedido fechado", "total": total, "troco": data.amount_received - total}
 
@@ -468,6 +494,53 @@ def cancel_order(
     )
     db.commit()
     return {"message": "Pedido cancelado"}
+
+
+@app.get("/cash/status")
+def cash_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_roles(current_user, {"admin", "cashier"})
+    session = get_open_cash_session(db)
+    if session is None:
+        return {"open": False, "session": None}
+    movements = db.query(CashFlow).filter(CashFlow.cash_session_id == session.id).all()
+    expected_amount = sum(m.amount for m in movements)
+    return {
+        "open": True,
+        "session": {
+            "id": session.id,
+            "status": session.status,
+            "opening_amount": session.opening_amount,
+            "opened_at": session.opened_at,
+            "expected_amount": expected_amount,
+        },
+    }
+
+
+@app.get("/cash/report")
+def cash_report(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_roles(current_user, {"admin", "cashier"})
+    session = get_open_cash_session(db)
+    if session is None:
+        raise HTTPException(status_code=400, detail="Caixa fechado")
+        
+    movements = db.query(CashFlow).filter(CashFlow.cash_session_id == session.id).all()
+    
+    report = {
+        "expected_amount": session.opening_amount,
+        "by_method": {}
+    }
+    
+    for m in movements:
+        if m.type == "ENTRADA" or m.type == "ABERTURA":
+            report["expected_amount"] += m.amount
+            method = m.payment_method or "NAO_INFORMADO"
+            report["by_method"][method] = report["by_method"].get(method, 0) + m.amount
+        elif m.type in ["SAIDA", "RETIRADA", "SANGRIA"]:
+            report["expected_amount"] -= m.amount
+            method = m.payment_method or "NAO_INFORMADO"
+            report["by_method"][method] = report["by_method"].get(method, 0) - m.amount
+
+    return report
 
 
 @app.get("/cashflow")
@@ -514,6 +587,12 @@ def close_cash(
     current_open = get_open_cash_session(db)
     if current_open is None:
         raise HTTPException(status_code=400, detail="Nao ha caixa aberto")
+
+    open_orders = db.query(Order).filter(Order.status == "ABERTO", Order.cash_session_id == current_open.id).all()
+    for o in open_orders:
+        o.status = "FECHADO"
+        o.payment_method = "FATURADO"
+        o.payment_status = "PENDENTE"
 
     expected_amount = sum(
         movement.amount
@@ -591,86 +670,107 @@ def cash_withdrawal(
     return {"message": "Sangria registrada"}
 
 
-@app.post("/stock/{product_id}/in")
-def stock_in(
-    product_id: int,
-    data: StockMovementRequest,
+@app.get("/invoices")
+def list_invoices(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_roles(current_user, {"admin", "cashier"})
+    pending_orders = db.query(Order).filter(
+        Order.payment_status == "PENDENTE", 
+        Order.payment_method == "FATURADO"
+    ).all()
+    
+    invoices = {}
+    for o in pending_orders:
+        if not o.customer_name:
+            continue
+        if o.customer_name not in invoices:
+            invoices[o.customer_name] = {
+                "customer_name": o.customer_name,
+                "first_purchase": o.created_at,
+                "total": 0.0,
+                "orders": []
+            }
+        else:
+            if o.created_at < invoices[o.customer_name]["first_purchase"]:
+                invoices[o.customer_name]["first_purchase"] = o.created_at
+        
+        invoices[o.customer_name]["total"] += o.total
+        invoices[o.customer_name]["orders"].append(o.id)
+        
+    result = []
+    from datetime import timedelta
+    for customer, data in invoices.items():
+        data["due_date"] = data["first_purchase"] + timedelta(days=30)
+        result.append(data)
+        
+    return result
+
+@app.post("/invoices/{customer_name}/pay")
+def pay_invoice(
+    customer_name: str,
+    data: PayInvoiceRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_roles(current_user, {"admin"})
-    product_exists = db.query(Product).filter(Product.id == product_id).first()
-    if product_exists is None:
-        raise HTTPException(status_code=404, detail="Produto nao encontrado")
-    stock = db.query(Estoque).filter(Estoque.product_id == product_id).first()
-    if stock is None:
-        stock = Estoque(product_id=product_id, quantity=0)
-        db.add(stock)
-    stock.quantity += data.quantity
-    db.commit()
-    return {"product_id": product_id, "quantity": stock.quantity}
-
-
-@app.post("/stock/{product_id}/out")
-def stock_out(
-    product_id: int,
-    data: StockMovementRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_roles(current_user, {"admin"})
-    stock = db.query(Estoque).filter(Estoque.product_id == product_id).first()
-    if stock is None:
-        raise HTTPException(status_code=404, detail="Estoque nao encontrado")
-    if stock.quantity < data.quantity:
-        raise HTTPException(status_code=400, detail="Estoque insuficiente")
-    stock.quantity -= data.quantity
-    db.commit()
-    return {"product_id": product_id, "quantity": stock.quantity}
-
-
-@app.put("/stock/{product_id}/adjust")
-def stock_adjust(
-    product_id: int,
-    data: StockAdjustRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_roles(current_user, {"admin"})
-    product_exists = db.query(Product).filter(Product.id == product_id).first()
-    if product_exists is None:
-        raise HTTPException(status_code=404, detail="Produto nao encontrado")
-    stock = db.query(Estoque).filter(Estoque.product_id == product_id).first()
-    if stock is None:
-        stock = Estoque(product_id=product_id, quantity=0)
-        db.add(stock)
-    stock.quantity = data.quantity
-    db.commit()
-    return {"product_id": product_id, "quantity": stock.quantity}
-
-
-@app.get("/stock/low")
-def low_stock(
-    limit: int = Query(default=5, ge=0),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ):
     require_roles(current_user, {"admin", "cashier"})
-    items = (
-        db.query(Estoque, Product)
-        .join(Product, Product.id == Estoque.product_id)
-        .filter(Estoque.quantity <= limit, Product.is_active.is_(True))
-        .all()
+    session = get_open_cash_session(db)
+    if session is None:
+        raise HTTPException(status_code=400, detail="Caixa fechado. Abra o caixa antes de quitar dívidas.")
+        
+    pending_orders = db.query(Order).filter(
+        Order.payment_status == "PENDENTE",
+        Order.payment_method == "FATURADO",
+        Order.customer_name == customer_name
+    ).all()
+    
+    if not pending_orders:
+        raise HTTPException(status_code=404, detail="Nenhuma dívida encontrada para este cliente.")
+        
+    total_paid = sum(o.total for o in pending_orders)
+    
+    for o in pending_orders:
+        o.payment_status = "PAGO"
+        
+    db.add(
+        CashFlow(
+            cash_session_id=session.id,
+            type="ENTRADA",
+            amount=total_paid,
+            description=f"Quitação faturado: {customer_name}",
+            payment_method=data.payment_method.upper(),
+        )
     )
-    return [
-        {
-            "product_id": stock.product_id,
-            "product_name": prod.name,
-            "quantity": stock.quantity,
-            "limit": limit,
-        }
-        for stock, prod in items
-    ]
+    
+    db.commit()
+    return {"message": "Dívida quitada com sucesso", "total": total_paid}
+
+
+@app.get("/reports/period")
+def period_report(
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin"})
+    movements = db.query(CashFlow).filter(
+        func.date(CashFlow.created_at) >= start_date,
+        func.date(CashFlow.created_at) <= end_date
+    ).all()
+    
+    total = sum(m.amount for m in movements if m.type in ["ENTRADA", "ABERTURA"])
+    by_method: dict[str, float] = {}
+    for m in movements:
+        if m.type in ["ENTRADA", "ABERTURA"]:
+            method = m.payment_method or "NAO_INFORMADO"
+            by_method[method] = by_method.get(method, 0) + m.amount
+            
+    return {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "total": total,
+        "by_method": by_method,
+        "items": len(movements)
+    }
 
 
 @app.get("/reports/daily")

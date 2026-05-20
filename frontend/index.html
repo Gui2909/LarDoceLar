@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LarDoceLar PDV</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div id="toast-container" aria-live="polite"></div>
+
+  <div id="login-screen" class="screen hidden">
+    <div class="login-card">
+      <div class="brand">
+        <img src="/static/img/logo.png" alt="Doce Lar Logo" style="max-height: 120px; object-fit: contain; margin-bottom: 10px;">
+        <h1 style="color: var(--primary);">Doce Lar</h1>
+        <p>Hotel, Restaurante e Lanchonete</p>
+      </div>
+      <form id="login-form">
+        <label>Usuário</label>
+        <input type="text" id="login-name" required autocomplete="username" placeholder="Seu nome de usuário">
+        <label>Senha</label>
+        <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••">
+        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+      </form>
+      <form id="setup-form" class="hidden">
+        <p class="setup-hint">Primeiro acesso — crie o usuário administrador.</p>
+        <label>Nome do administrador</label>
+        <input type="text" id="setup-name" required minlength="3" placeholder="Ex: admin">
+        <label>Senha</label>
+        <input type="password" id="setup-password" required minlength="4" placeholder="Mínimo 4 caracteres">
+        <button type="submit" class="btn btn-primary btn-block">Criar e entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-shell" class="hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <img src="/static/img/logo.png" alt="Doce Lar" style="width: 40px; height: 40px; object-fit: contain;">
+        <div>
+          <strong>Doce Lar</strong>
+          <small id="user-info"></small>
+        </div>
+      </div>
+      <nav id="main-nav"></nav>
+      <button type="button" id="btn-logout" class="btn btn-ghost btn-block">Sair</button>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <h2 id="page-title">PDV</h2>
+        <div id="cash-badge" class="cash-badge hidden"></div>
+      </header>
+      <section id="page-content"></section>
+    </main>
+  </div>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
