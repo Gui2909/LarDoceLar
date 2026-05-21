@@ -570,19 +570,19 @@ async function renderCash() {
       ` : ""}
 
       <div class="form-row">
-        ${isAdmin && !status.open ? `
+        ${!status.open ? `
           <div>
             <label>Valor de abertura</label>
             <input type="number" id="open-amount" min="0" step="0.01" value="0">
             <button type="button" class="btn btn-primary btn-block" id="btn-open-cash">Abrir caixa</button>
           </div>
         ` : ""}
-        ${isAdmin && status.open ? `
+        ${status.open ? `
           <div>
             <label>Valor de fechamento</label>
             <input type="number" id="close-amount" min="0" step="0.01" value="${session.expected_amount.toFixed(2)}">
-            <label>Senha liberação (Opcional)</label>
-            <input type="password" id="close-password" placeholder="Senha gerente">
+            <label>Senha liberação (Obrigatória)</label>
+            <input type="password" id="close-password" placeholder="Senha do Admin">
             <button type="button" class="btn btn-danger btn-block" id="btn-close-cash" style="margin-top:12px;">Fechar caixa</button>
           </div>
         ` : ""}

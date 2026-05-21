@@ -574,7 +574,7 @@ def open_cash(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_roles(current_user, {"admin"})
+    require_roles(current_user, {"admin", "cashier"})
     current_open = get_open_cash_session(db)
     if current_open is not None:
         raise HTTPException(status_code=409, detail="Ja existe caixa aberto")
@@ -602,15 +602,20 @@ def close_cash(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_roles(current_user, {"admin"})
+    require_roles(current_user, {"admin", "cashier"})
+    
+    if not data.password:
+        raise HTTPException(status_code=403, detail="Senha de administrador é obrigatória para fechar o caixa.")
+        
+    admin_user = db.query(User).filter(User.role == "admin", User.password_hash == make_hash(data.password)).first()
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Senha de administrador incorreta!")
+
     current_open = get_open_cash_session(db)
     if current_open is None:
         raise HTTPException(status_code=400, detail="Nao ha caixa aberto")
 
     open_orders = db.query(Order).filter(Order.status == "ABERTO", Order.cash_session_id == current_open.id).all()
-    if open_orders:
-        if data.password != "Crocolygio":
-            raise HTTPException(status_code=403, detail="Existem pedidos abertos! Senha incorreta.")
 
     for o in open_orders:
         o.status = "FECHADO"
