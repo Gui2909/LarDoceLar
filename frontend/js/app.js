@@ -6,7 +6,7 @@ import {
   clearSession,
   formatMoney,
   formatDateTime,
-} from "./api.js";
+} from "./api.js?v=2";
 
 const state = {
   user: null,

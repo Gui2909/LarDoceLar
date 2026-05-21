@@ -19,9 +19,6 @@ export function clearSession() {
   localStorage.removeItem("ldl_user");
 }
 
-export async function getCashReport() {
-  return api("/cash/report");
-}
 
 export async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -80,6 +77,7 @@ export const endpoints = {
   supplyCash: (body) => api("/cash/supply", { method: "POST", body: JSON.stringify(body) }),
   withdrawCash: (body) => api("/cash/withdrawal", { method: "POST", body: JSON.stringify(body) }),
   listCashflow: () => api("/cashflow"),
+  getCashReport: () => api("/cash/report"),
   periodReport: (startDate, endDate) => api(`/reports/period?start_date=${startDate}&end_date=${endDate}`),
 };
 

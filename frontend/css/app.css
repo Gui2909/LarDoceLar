@@ -39,8 +39,8 @@ body {
   justify-content: center;
   padding: 24px;
   background:
-    radial-gradient(circle at top right, #fde8ec 0%, transparent 45%),
-    radial-gradient(circle at bottom left, #fff4dc 0%, transparent 40%),
+    radial-gradient(circle at top right, var(--primary-soft) 0%, transparent 45%),
+    radial-gradient(circle at bottom left, var(--secondary-soft) 0%, transparent 40%),
     var(--bg);
 }
 
@@ -134,7 +134,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .sidebar {
-  background: #3d2c29;
+  background: var(--primary-dark);
   color: #fff;
   padding: 24px 16px;
   display: flex;
@@ -146,14 +146,17 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding: 8px 10px 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.12);
-  margin-bottom: 8px;
+  padding: 12px;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 .sidebar-brand span { font-size: 1.8rem; }
-.sidebar-brand strong { display: block; }
-.sidebar-brand small { color: rgba(255,255,255,0.65); }
+.sidebar-brand strong { display: block; font-size: 1.1rem; }
+.sidebar-brand small { color: var(--text-muted); }
 
 .nav-btn {
   width: 100%;
