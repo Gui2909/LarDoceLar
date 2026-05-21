@@ -12,6 +12,9 @@ if not DATABASE_URL:
         "DATABASE_URL não definida. Copie .env.example para .env ou exporte a variável."
     )
 
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 engine = create_engine(
     DATABASE_URL,
     client_encoding="utf8"
