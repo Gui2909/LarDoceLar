@@ -330,12 +330,20 @@ def get_order(
     if current is None:
         raise HTTPException(status_code=404, detail="Pedido nao encontrado")
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    
+    cancel_reason = None
+    if current.status == "CANCELADO":
+        flow = db.query(CashFlow).filter(CashFlow.type == "AUDITORIA", CashFlow.description.like(f"Cancelamento do pedido {order_id}%")).first()
+        if flow and "Motivo:" in flow.description:
+            cancel_reason = flow.description.split("Motivo:")[-1].strip()
+            
     return {
         "id": current.id,
         "customer_name": current.customer_name,
         "status": current.status,
         "total": current.total,
         "items": items,
+        "cancel_reason": cancel_reason,
     }
 
 

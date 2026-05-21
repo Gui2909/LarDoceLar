@@ -397,6 +397,7 @@ async function showOrderDetail(orderId) {
   container.innerHTML = `
     <div class="card">
       <h3>Pedido #${order.id} - ${escapeHtml(order.customer_name || 'Cliente')} · ${order.status}</h3>
+      ${order.cancel_reason ? `<div class="alert cancel" style="margin-top: 10px; margin-bottom: 10px;"><strong>Motivo do Cancelamento:</strong> ${escapeHtml(order.cancel_reason)}</div>` : ''}
       <table>
         <thead><tr><th>Produto</th><th>Qtd</th><th>Preço</th><th>Subtotal</th></tr></thead>
         <tbody>
