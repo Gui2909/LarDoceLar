@@ -249,19 +249,46 @@ function promptCustomerName() {
       </div>
     `;
     document.body.appendChild(backdrop);
-    
     const input = backdrop.querySelector("#customer-name-input");
-    setTimeout(() => input.focus(), 50);
-
+    input.focus();
     const close = (val) => {
       backdrop.remove();
       resolve(val);
     };
-
-    backdrop.querySelector("#cancel-customer").addEventListener("click", () => close(null));
     backdrop.querySelector("#confirm-customer").addEventListener("click", () => close(input.value.trim()));
+    backdrop.querySelector("#cancel-customer").addEventListener("click", () => close(null));
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") close(input.value.trim());
+    });
+  });
+}
+
+function promptAdminPassword() {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.innerHTML = `
+      <div class="modal">
+        <h3>Autorização de Administrador</h3>
+        <label>Senha do Administrador (obrigatória)</label>
+        <input type="password" id="admin-password-input" placeholder="Senha ADM">
+        <div class="actions" style="margin-top:18px">
+          <button type="button" class="btn btn-danger" id="confirm-admin-pwd">Confirmar Exclusão</button>
+          <button type="button" class="btn btn-secondary" id="cancel-admin-pwd">Cancelar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const input = backdrop.querySelector("#admin-password-input");
+    input.focus();
+    const close = (val) => {
+      backdrop.remove();
+      resolve(val);
+    };
+    backdrop.querySelector("#confirm-admin-pwd").addEventListener("click", () => close(input.value));
+    backdrop.querySelector("#cancel-admin-pwd").addEventListener("click", () => close(null));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") close(input.value);
     });
   });
 }
@@ -293,12 +320,16 @@ function bindCartActions(orderId) {
       if (!item) return;
 
       if (btn.dataset.action === "remove") {
-        await withError(() => endpoints.removeItem(orderId, itemId), "Item removido");
+        const password = await promptAdminPassword();
+        if (!password) return;
+        await withError(() => endpoints.removeItem(orderId, itemId, password), "Item removido");
       } else if (btn.dataset.action === "inc") {
         await withError(() => endpoints.updateItem(orderId, itemId, { quantity: item.quantity + 1 }));
       } else if (btn.dataset.action === "dec") {
         if (item.quantity <= 1) {
-          await withError(() => endpoints.removeItem(orderId, itemId), "Item removido");
+          const password = await promptAdminPassword();
+          if (!password) return;
+          await withError(() => endpoints.removeItem(orderId, itemId, password), "Item removido");
         } else {
           await withError(() => endpoints.updateItem(orderId, itemId, { quantity: item.quantity - 1 }));
         }
@@ -393,7 +424,9 @@ async function renderOrders() {
     btn.addEventListener("click", async () => {
       const orderId = Number(btn.dataset.deleteOrder);
       if (confirm(`Tem certeza que deseja APAGAR COMPLETAMENTE o pedido #${orderId}? Esta ação não pode ser desfeita e o pedido sumirá do sistema.`)) {
-        const ok = await withError(() => endpoints.deleteOrder(orderId), "Pedido excluído com sucesso");
+        const password = await promptAdminPassword();
+        if (!password) return;
+        const ok = await withError(() => endpoints.deleteOrder(orderId, password), "Pedido excluído com sucesso");
         if (ok) { await refreshCashBadge(); renderOrders(); }
       }
     });

@@ -170,6 +170,8 @@ class StockAdjustRequest(BaseModel):
 class AuditRequest(BaseModel):
     reason: str = Field(min_length=5, max_length=200)
 
+class AdminAuthRequest(BaseModel):
+    password: str = Field(..., min_length=1)
 
 @app.get("/users")
 def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -432,10 +434,16 @@ def update_item(
 def remove_item(
     order_id: int,
     item_id: int,
+    data: AdminAuthRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_roles(current_user, {"admin", "cashier"})
+    
+    admin_user = db.query(User).filter(User.role == "admin", User.password_hash == make_hash(data.password)).first()
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Senha de administrador incorreta!")
+        
     current_order = db.query(Order).filter(Order.id == order_id).first()
     if current_order is None:
         raise HTTPException(status_code=404, detail="Pedido nao encontrado")
@@ -539,10 +547,16 @@ def cancel_order(
 @app.delete("/orders/{order_id}")
 def delete_order(
     order_id: int,
+    data: AdminAuthRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_roles(current_user, {"admin"})
+    require_roles(current_user, {"admin", "cashier"})
+    
+    admin_user = db.query(User).filter(User.role == "admin", User.password_hash == make_hash(data.password)).first()
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Senha de administrador incorreta!")
+        
     current_order = db.query(Order).filter(Order.id == order_id).first()
     if current_order is None:
         raise HTTPException(status_code=404, detail="Pedido nao encontrado")

@@ -63,15 +63,15 @@ export const endpoints = {
     api(`/orders/${orderId}/items`, { method: "POST", body: JSON.stringify(body) }),
   updateItem: (orderId, itemId, body) =>
     api(`/orders/${orderId}/items/${itemId}`, { method: "PUT", body: JSON.stringify(body) }),
-  removeItem: (orderId, itemId) =>
-    api(`/orders/${orderId}/items/${itemId}`, { method: "DELETE" }),
+  removeItem: (orderId, itemId, password) =>
+    api(`/orders/${orderId}/items/${itemId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
   checkout: (orderId, body) =>
     api(`/orders/${orderId}/checkout`, { method: "POST", body: JSON.stringify(body) }),
   listInvoices: () => api("/invoices"),
   payInvoice: (customerName, body) => api(`/invoices/${encodeURIComponent(customerName)}/pay`, { method: "POST", body: JSON.stringify(body) }),
   cancelOrder: (orderId, body) =>
     api(`/orders/${orderId}/cancel`, { method: "POST", body: JSON.stringify(body) }),
-  deleteOrder: (orderId) => api(`/orders/${orderId}`, { method: "DELETE" }),
+  deleteOrder: (orderId, password) => api(`/orders/${orderId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
   cashStatus: () => api("/cash/status"),
   openCash: (body) => api("/cash/open", { method: "POST", body: JSON.stringify(body) }),
   closeCash: (body) => api("/cash/close", { method: "POST", body: JSON.stringify(body) }),
