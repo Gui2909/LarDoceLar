@@ -336,13 +336,26 @@ def get_order(
         flow = db.query(CashFlow).filter(CashFlow.type == "AUDITORIA", CashFlow.description.like(f"Cancelamento do pedido {order_id}%")).first()
         if flow and "Motivo:" in flow.description:
             cancel_reason = flow.description.split("Motivo:")[-1].strip()
-            
+
+    items_data = []
+    for item in items:
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+        items_data.append({
+            "id": item.id,
+            "order_id": item.order_id,
+            "product_id": item.product_id,
+            "product_name": product.name if product else "Produto Removido",
+            "quantity": item.quantity,
+            "price": item.price,
+            "subtotal": item.quantity * item.price
+        })
+
     return {
         "id": current.id,
         "customer_name": current.customer_name,
         "status": current.status,
         "total": current.total,
-        "items": items,
+        "items": items_data,
         "cancel_reason": cancel_reason,
     }
 
