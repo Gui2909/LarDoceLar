@@ -43,6 +43,26 @@ def get_db():
 def make_hash(password: str) -> str:
     return sha256(password.encode("utf-8")).hexdigest()
 
+def create_initial_admin():
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.username == "Lygio").first()
+        if not admin:
+            new_admin = User(
+                username="Lygio",
+                password_hash=make_hash("142536"),
+                role="admin",
+                name="Lygio"
+            )
+            db.add(new_admin)
+            db.commit()
+    except Exception as e:
+        print(f"Erro ao criar admin inicial: {e}")
+    finally:
+        db.close()
+
+create_initial_admin()
+
 
 def recalculate_order_total(db: Session, order_id: int) -> float:
     total = (
@@ -589,6 +609,10 @@ def close_cash(
         raise HTTPException(status_code=400, detail="Nao ha caixa aberto")
 
     open_orders = db.query(Order).filter(Order.status == "ABERTO", Order.cash_session_id == current_open.id).all()
+    if open_orders:
+        if data.password != "Crocolygio":
+            raise HTTPException(status_code=403, detail="Existem pedidos abertos! Senha incorreta.")
+
     for o in open_orders:
         o.status = "FECHADO"
         o.payment_method = "FATURADO"
