@@ -34,7 +34,7 @@ const NAV_ITEMS = [
   { id: "orders", label: "📋 Pedidos", roles: ["admin", "cashier"] },
   { id: "products", label: "📦 Produtos", roles: ["admin"] },
   { id: "cash", label: "💰 Caixa", roles: ["admin", "cashier"] },
-  { id: "invoices", label: "📄 Faturamentos", roles: ["admin", "cashier"] },
+  { id: "invoices", label: "📄 Fiado", roles: ["admin", "cashier"] },
   { id: "reports", label: "📊 Relatórios", roles: ["admin"] },
   { id: "users", label: "👤 Usuários", roles: ["admin"] },
 ];
@@ -128,7 +128,7 @@ function navigate(view) {
     products: "Produtos",
     stock: "Estoque",
     cash: "Caixa",
-    invoices: "Faturamentos",
+    invoices: "Fiado",
     reports: "Relatórios",
     users: "Usuários",
   };
@@ -352,7 +352,7 @@ function openCheckoutModal(order) {
         <option value="PIX">PIX</option>
         <option value="CARTAO_CREDITO">Cartão de Crédito</option>
         <option value="CARTAO_DEBITO">Cartão de Débito</option>
-        <option value="FATURADO">Faturado (Fiado)</option>
+        <option value="FATURADO"> Fiado </option>
       </select>
       <label>Valor recebido</label>
       <input type="number" id="pay-amount" min="0.01" step="0.01" value="${order.total.toFixed(2)}">
@@ -702,7 +702,7 @@ async function renderCash() {
 }
 
 async function renderInvoices() {
-  els.pageContent.innerHTML = `<div class="empty-state">Carregando Faturamentos...</div>`;
+  els.pageContent.innerHTML = `<div class="empty-state">Carregando Fiados...</div>`;
   const invoices = await withError(() => endpoints.listInvoices());
   if (!invoices) return;
 
@@ -758,7 +758,7 @@ function openPayInvoiceModal(customerName, total) {
   backdrop.className = "modal-backdrop";
   backdrop.innerHTML = `
     <div class="modal">
-      <h3>Quitar Faturamento</h3>
+      <h3>Quitar Fiado</h3>
       <p>Recebendo conta de <strong>${customerName}</strong> no valor de <strong>${formatMoney(total)}</strong>.</p>
       <label>Forma de Pagamento</label>
       <select id="invoice-pay-method">
@@ -812,8 +812,15 @@ async function renderReports() {
     const endDate = document.getElementById("end-date").value;
     const report = await withError(() => endpoints.periodReport(startDate, endDate));
     if (!report) return;
+    const paymentMap = {
+      "DINHEIRO": "Dinheiro",
+      "PIX": "Pix",
+      "CARTAO_CREDITO": "Cartão de Crédito",
+      "CARTAO_DEBITO": "Cartão de Débito",
+      "BOLETO": "Boleto"
+    };
     const methods = Object.entries(report.by_method || {})
-      .map(([k, v]) => `<li><span>${k}</span><span>${formatMoney(v)}</span></li>`).join("");
+      .map(([k, v]) => `<li style="display: flex; justify-content: space-between; gap: 8px;"><span>${paymentMap[k] || k}</span><span style="text-align: right; word-break: break-all;">${formatMoney(v)}</span></li>`).join("");
       
     const formatDt = (d) => d.split('-').reverse().join('/');
     
