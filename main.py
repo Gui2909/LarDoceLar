@@ -523,6 +523,37 @@ def cancel_order(
     return {"message": "Pedido cancelado"}
 
 
+@app.delete("/orders/{order_id}")
+def delete_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin"})
+    current_order = db.query(Order).filter(Order.id == order_id).first()
+    if current_order is None:
+        raise HTTPException(status_code=404, detail="Pedido nao encontrado")
+    if current_order.status != "ABERTO":
+        raise HTTPException(status_code=400, detail="Apenas pedido aberto pode ser excluido")
+
+    db.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
+    db.delete(current_order)
+    
+    db.add(
+        CashFlow(
+            type="AUDITORIA",
+            amount=0,
+            description=(
+                f"Exclusao do pedido {order_id} (Cliente: {current_order.customer_name}) por usuario {current_user.id}."
+            ),
+            payment_method="NA",
+        )
+    )
+    
+    db.commit()
+    return {"message": "Pedido excluido"}
+
+
 @app.get("/cash/status")
 def cash_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_roles(current_user, {"admin", "cashier"})

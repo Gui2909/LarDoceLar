@@ -371,7 +371,8 @@ async function renderOrders() {
               <td class="actions">
                 <button type="button" class="btn btn-secondary btn-sm" data-view-order="${o.id}">Ver</button>
                 ${o.status === "ABERTO" && state.user.role === "admin"
-                  ? `<button type="button" class="btn btn-danger btn-sm" data-cancel-order="${o.id}">Cancelar</button>`
+                  ? `<button type="button" class="btn btn-danger btn-sm" data-cancel-order="${o.id}">Cancelar</button>
+                     <button type="button" class="btn btn-danger btn-sm" data-delete-order="${o.id}" style="background-color: #8B0000; border-color: #8B0000;">Excluir</button>`
                   : ""}
               </td>
             </tr>
@@ -387,6 +388,15 @@ async function renderOrders() {
   });
   document.querySelectorAll("[data-cancel-order]").forEach((btn) => {
     btn.addEventListener("click", () => openCancelModal(Number(btn.dataset.cancelOrder)));
+  });
+  document.querySelectorAll("[data-delete-order]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const orderId = Number(btn.dataset.deleteOrder);
+      if (confirm(`Tem certeza que deseja APAGAR COMPLETAMENTE o pedido #${orderId}? Esta ação não pode ser desfeita e o pedido sumirá do sistema.`)) {
+        const ok = await withError(() => endpoints.deleteOrder(orderId), "Pedido excluído com sucesso");
+        if (ok) { await refreshCashBadge(); renderOrders(); }
+      }
+    });
   });
 }
 

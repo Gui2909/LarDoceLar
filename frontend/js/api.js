@@ -71,6 +71,7 @@ export const endpoints = {
   payInvoice: (customerName, body) => api(`/invoices/${encodeURIComponent(customerName)}/pay`, { method: "POST", body: JSON.stringify(body) }),
   cancelOrder: (orderId, body) =>
     api(`/orders/${orderId}/cancel`, { method: "POST", body: JSON.stringify(body) }),
+  deleteOrder: (orderId) => api(`/orders/${orderId}`, { method: "DELETE" }),
   cashStatus: () => api("/cash/status"),
   openCash: (body) => api("/cash/open", { method: "POST", body: JSON.stringify(body) }),
   closeCash: (body) => api("/cash/close", { method: "POST", body: JSON.stringify(body) }),
