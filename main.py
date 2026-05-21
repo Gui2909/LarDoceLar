@@ -46,13 +46,12 @@ def make_hash(password: str) -> str:
 def create_initial_admin():
     db = SessionLocal()
     try:
-        admin = db.query(User).filter(User.username == "Lygio").first()
+        admin = db.query(User).filter(User.name == "Lygio").first()
         if not admin:
             new_admin = User(
-                username="Lygio",
+                name="Lygio",
                 password_hash=make_hash("142536"),
-                role="admin",
-                name="Lygio"
+                role="admin"
             )
             db.add(new_admin)
             db.commit()

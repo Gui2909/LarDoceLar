@@ -56,7 +56,8 @@ async function withError(action, successMessage) {
     if (error.status === 401) {
       clearSession();
       showLogin();
-      toast("Sessão expirada. Faça login novamente.", "error");
+      const msg = error.message && error.message !== "Erro 401" ? error.message : "Sessão expirada. Faça login novamente.";
+      toast(msg, "error");
       return null;
     }
     toast(error.message || "Erro inesperado", "error");
