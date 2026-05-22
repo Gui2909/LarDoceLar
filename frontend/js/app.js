@@ -389,7 +389,7 @@ function openCheckoutModal(order) {
         </div>
 
         <div class="actions" style="margin-top:18px">
-          <button type="button" class="btn btn-primary" id="confirm-checkout" ${totalReceived < order.total ? "disabled" : ""}>Confirmar</button>
+          <button type="button" class="btn btn-primary" id="confirm-checkout" ${Math.round(totalReceived * 100) < Math.round(order.total * 100) ? "disabled" : ""}>Confirmar</button>
           <button type="button" class="btn btn-secondary" id="cancel-checkout">Cancelar</button>
         </div>
       </div>

@@ -536,7 +536,7 @@ def checkout_order(
     total = recalculate_order_total(db, order_id)
     total_received = sum(p.amount for p in data.payments)
     
-    if total_received < total:
+    if round(total_received, 2) < round(total, 2):
         raise HTTPException(status_code=400, detail="Valor recebido menor que o total")
 
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
