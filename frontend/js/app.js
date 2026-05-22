@@ -981,18 +981,13 @@ async function renderReports() {
         <div class="report-receipt">
           <div class="receipt-header">
             <h2>LarDoceLar</h2>
-            <p>Operador: ${state.user.name}</p>
-            <p>Vendas de ${formatDt(startDate)} até ${formatDt(endDate)}</p>
+            <p>${startDate === endDate ? formatDt(startDate) : `De ${formatDt(startDate)} até ${formatDt(endDate)}`}</p>
           </div>
           <div class="receipt-body">
-            <p><strong>Lançamentos:</strong> ${report.items}</p>
-            <p><strong>Total movimentado:</strong> ${formatMoney(report.total)}</p>
+            <p><strong>Vendas (Total):</strong> ${formatMoney(report.total)}</p>
             <hr style="border: none; border-top: 1px dashed var(--text-muted); margin: 12px 0;">
             <p style="margin-bottom:8px"><strong>Por método de pagamento:</strong></p>
             <ul>${methods || "<li><span>Nenhum</span><span>—</span></li>"}</ul>
-          </div>
-          <div class="receipt-footer">
-            <p>Gerado em ${new Date().toLocaleString('pt-BR')}</p>
           </div>
         </div>
       `;
@@ -1006,9 +1001,8 @@ async function renderReports() {
       document.getElementById("report-result").innerHTML = `
         <div class="report-receipt" style="max-width: 600px;">
           <div class="receipt-header">
-            <h2>LarDoceLar - Produtos Vendidos</h2>
-            <p>Operador: ${state.user.name}</p>
-            <p>De ${formatDt(startDate)} até ${formatDt(endDate)}</p>
+            <h2>LarDoceLar</h2>
+            <p>${startDate === endDate ? formatDt(startDate) : `De ${formatDt(startDate)} até ${formatDt(endDate)}`}</p>
           </div>
           <div class="receipt-body">
             <table style="width:100%; border-collapse:collapse; margin-top:10px;">
@@ -1016,7 +1010,7 @@ async function renderReports() {
                 <tr style="border-bottom:1px solid #ddd;">
                   <th style="padding:4px; text-align:left;">Produto</th>
                   <th style="padding:4px; text-align:right;">Qtd</th>
-                  <th style="padding:4px; text-align:right;">Total</th>
+                  <th style="padding:4px; text-align:right;">Vendas</th>
                 </tr>
               </thead>
               <tbody>
@@ -1031,10 +1025,7 @@ async function renderReports() {
             </table>
             <hr style="border: none; border-top: 1px dashed var(--text-muted); margin: 12px 0;">
             <p style="text-align:right;"><strong>Total Itens:</strong> ${totalQty}</p>
-            <p style="text-align:right;"><strong>Faturamento:</strong> ${formatMoney(totalRev)}</p>
-          </div>
-          <div class="receipt-footer">
-            <p>Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+            <p style="text-align:right;"><strong>Total Vendas:</strong> ${formatMoney(totalRev)}</p>
           </div>
         </div>
       `;
