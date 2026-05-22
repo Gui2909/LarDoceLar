@@ -72,6 +72,8 @@ export const endpoints = {
   cancelOrder: (orderId, body) =>
     api(`/orders/${orderId}/cancel`, { method: "POST", body: JSON.stringify(body) }),
   deleteOrder: (orderId, password) => api(`/orders/${orderId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
+  deleteProduct: (productId, password) => api(`/products/${productId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
+  deleteUser: (userId, password) => api(`/users/${userId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
   cashStatus: () => api("/cash/status"),
   openCash: (body) => api("/cash/open", { method: "POST", body: JSON.stringify(body) }),
   closeCash: (body) => api("/cash/close", { method: "POST", body: JSON.stringify(body) }),

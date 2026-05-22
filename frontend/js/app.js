@@ -175,7 +175,11 @@ async function renderPdv() {
   }
 
   const order = await withError(() => endpoints.getOrder(state.currentOrder.id));
-  if (!order) return;
+  if (!order) {
+    state.currentOrder = null;
+    renderPdv();
+    return;
+  }
 
   const cashAlert = !cash?.open
     ? `<div class="alert warning">Caixa fechado. Abra o caixa (menu Caixa) antes de finalizar vendas.</div>`
@@ -263,30 +267,30 @@ function promptCustomerName() {
   });
 }
 
-function promptAdminPassword() {
+function promptUserPassword() {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
     backdrop.className = "modal-backdrop";
     backdrop.innerHTML = `
       <div class="modal">
-        <h3>Autorização de Administrador</h3>
-        <label>Senha do Administrador (obrigatória)</label>
-        <input type="password" id="admin-password-input" placeholder="Senha ADM">
+        <h3>Confirmação de Exclusão</h3>
+        <label>Sua Senha (obrigatória)</label>
+        <input type="password" id="user-password-input" placeholder="Sua senha">
         <div class="actions" style="margin-top:18px">
-          <button type="button" class="btn btn-danger" id="confirm-admin-pwd">Confirmar Exclusão</button>
-          <button type="button" class="btn btn-secondary" id="cancel-admin-pwd">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="confirm-user-pwd">Confirmar Exclusão</button>
+          <button type="button" class="btn btn-secondary" id="cancel-user-pwd">Cancelar</button>
         </div>
       </div>
     `;
     document.body.appendChild(backdrop);
-    const input = backdrop.querySelector("#admin-password-input");
+    const input = backdrop.querySelector("#user-password-input");
     input.focus();
     const close = (val) => {
       backdrop.remove();
       resolve(val);
     };
-    backdrop.querySelector("#confirm-admin-pwd").addEventListener("click", () => close(input.value));
-    backdrop.querySelector("#cancel-admin-pwd").addEventListener("click", () => close(null));
+    backdrop.querySelector("#confirm-user-pwd").addEventListener("click", () => close(input.value));
+    backdrop.querySelector("#cancel-user-pwd").addEventListener("click", () => close(null));
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") close(input.value);
     });
@@ -320,14 +324,14 @@ function bindCartActions(orderId) {
       if (!item) return;
 
       if (btn.dataset.action === "remove") {
-        const password = await promptAdminPassword();
+        const password = await promptUserPassword();
         if (!password) return;
         await withError(() => endpoints.removeItem(orderId, itemId, password), "Item removido");
       } else if (btn.dataset.action === "inc") {
         await withError(() => endpoints.updateItem(orderId, itemId, { quantity: item.quantity + 1 }));
       } else if (btn.dataset.action === "dec") {
         if (item.quantity <= 1) {
-          const password = await promptAdminPassword();
+          const password = await promptUserPassword();
           if (!password) return;
           await withError(() => endpoints.removeItem(orderId, itemId, password), "Item removido");
         } else {
@@ -424,10 +428,16 @@ async function renderOrders() {
     btn.addEventListener("click", async () => {
       const orderId = Number(btn.dataset.deleteOrder);
       if (confirm(`Tem certeza que deseja APAGAR COMPLETAMENTE o pedido #${orderId}? Esta ação não pode ser desfeita e o pedido sumirá do sistema.`)) {
-        const password = await promptAdminPassword();
+        const password = await promptUserPassword();
         if (!password) return;
         const ok = await withError(() => endpoints.deleteOrder(orderId, password), "Pedido excluído com sucesso");
-        if (ok) { await refreshCashBadge(); renderOrders(); }
+        if (ok) {
+          if (state.currentOrder && state.currentOrder.id === orderId) {
+            state.currentOrder = null;
+          }
+          await refreshCashBadge(); 
+          renderOrders(); 
+        }
       }
     });
   });
@@ -513,7 +523,8 @@ async function renderProducts() {
               <td>${p.is_active ? '<span class="badge open">Ativo</span>' : '<span class="badge cancel">Inativo</span>'}</td>
               <td class="actions">
                 ${p.is_active ? `<button type="button" class="btn btn-secondary btn-sm" data-edit-product='${JSON.stringify(p)}'>Editar</button>
-                <button type="button" class="btn btn-danger btn-sm" data-deactivate="${p.id}">Inativar</button>` : "—"}
+                <button type="button" class="btn btn-danger btn-sm" data-deactivate="${p.id}">Inativar</button>` : ""}
+                <button type="button" class="btn btn-danger btn-sm" data-delete-product="${p.id}" style="background-color: #8B0000; border-color: #8B0000;">Excluir</button>
               </td>
             </tr>
           `).join("")}
@@ -537,6 +548,17 @@ async function renderProducts() {
     btn.addEventListener("click", async () => {
       const ok = await withError(() => endpoints.deactivateProduct(Number(btn.dataset.deactivate)), "Produto inativado");
       if (ok) renderProducts();
+    });
+  });
+
+  document.querySelectorAll("[data-delete-product]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (confirm("Tem certeza que deseja EXCLUIR este produto definitivamente?")) {
+        const password = await promptUserPassword();
+        if (!password) return;
+        const ok = await withError(() => endpoints.deleteProduct(Number(btn.dataset.deleteProduct), password), "Produto excluído");
+        if (ok) renderProducts();
+      }
     });
   });
 
@@ -874,15 +896,33 @@ async function renderUsers() {
     </div>
     <div class="card table-wrap">
       <table>
-        <thead><tr><th>ID</th><th>Nome</th><th>Papel</th></tr></thead>
+        <thead><tr><th>ID</th><th>Nome</th><th>Papel</th><th>Ações</th></tr></thead>
         <tbody>
           ${users.map((u) => `
-            <tr><td>${u.id}</td><td>${escapeHtml(u.name)}</td><td>${u.role}</td></tr>
+            <tr>
+              <td>${u.id}</td>
+              <td>${escapeHtml(u.name)}</td>
+              <td>${u.role}</td>
+              <td class="actions">
+                <button type="button" class="btn btn-danger btn-sm" data-delete-user="${u.id}" style="background-color: #8B0000; border-color: #8B0000;">Excluir</button>
+              </td>
+            </tr>
           `).join("")}
         </tbody>
       </table>
     </div>
   `;
+
+  document.querySelectorAll("[data-delete-user]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (confirm("Tem certeza que deseja EXCLUIR este usuário definitivamente?")) {
+        const password = await promptUserPassword();
+        if (!password) return;
+        const ok = await withError(() => endpoints.deleteUser(Number(btn.dataset.deleteUser), password), "Usuário excluído");
+        if (ok) renderUsers();
+      }
+    });
+  });
 
   document.getElementById("user-form").addEventListener("submit", async (e) => {
     e.preventDefault();

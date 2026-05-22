@@ -170,7 +170,7 @@ class StockAdjustRequest(BaseModel):
 class AuditRequest(BaseModel):
     reason: str = Field(min_length=5, max_length=200)
 
-class AdminAuthRequest(BaseModel):
+class UserAuthRequest(BaseModel):
     password: str = Field(..., min_length=1)
 
 @app.get("/users")
@@ -291,6 +291,51 @@ def deactivate_product(
     current.is_active = False
     db.commit()
     return {"message": "Produto inativado"}
+
+
+@app.delete("/products/{product_id}")
+def delete_product(
+    product_id: int,
+    data: UserAuthRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin"})
+    
+    if current_user.password_hash != make_hash(data.password):
+        raise HTTPException(status_code=403, detail="Senha incorreta!")
+        
+    current = db.query(Product).filter(Product.id == product_id).first()
+    if current is None:
+        raise HTTPException(status_code=404, detail="Produto nao encontrado")
+        
+    db.delete(current)
+    db.commit()
+    return {"message": "Produto excluido"}
+
+
+@app.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    data: UserAuthRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin"})
+    
+    if current_user.password_hash != make_hash(data.password):
+        raise HTTPException(status_code=403, detail="Senha incorreta!")
+        
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Nao pode excluir o proprio usuario")
+        
+    current = db.query(User).filter(User.id == user_id).first()
+    if current is None:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+        
+    db.delete(current)
+    db.commit()
+    return {"message": "Usuario excluido"}
 
 
 @app.post("/orders")
@@ -434,15 +479,14 @@ def update_item(
 def remove_item(
     order_id: int,
     item_id: int,
-    data: AdminAuthRequest,
+    data: UserAuthRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_roles(current_user, {"admin", "cashier"})
     
-    admin_user = db.query(User).filter(User.role == "admin", User.password_hash == make_hash(data.password)).first()
-    if not admin_user:
-        raise HTTPException(status_code=403, detail="Senha de administrador incorreta!")
+    if current_user.password_hash != make_hash(data.password):
+        raise HTTPException(status_code=403, detail="Senha incorreta!")
         
     current_order = db.query(Order).filter(Order.id == order_id).first()
     if current_order is None:
@@ -547,15 +591,14 @@ def cancel_order(
 @app.delete("/orders/{order_id}")
 def delete_order(
     order_id: int,
-    data: AdminAuthRequest,
+    data: UserAuthRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_roles(current_user, {"admin", "cashier"})
     
-    admin_user = db.query(User).filter(User.role == "admin", User.password_hash == make_hash(data.password)).first()
-    if not admin_user:
-        raise HTTPException(status_code=403, detail="Senha de administrador incorreta!")
+    if current_user.password_hash != make_hash(data.password):
+        raise HTTPException(status_code=403, detail="Senha incorreta!")
         
     current_order = db.query(Order).filter(Order.id == order_id).first()
     if current_order is None:
