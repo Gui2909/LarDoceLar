@@ -406,9 +406,9 @@ async function renderOrders() {
               <td class="actions">
                 <button type="button" class="btn btn-secondary btn-sm" data-view-order="${o.id}">Ver</button>
                 ${o.status === "ABERTO" && state.user.role === "admin"
-                  ? `<button type="button" class="btn btn-danger btn-sm" data-cancel-order="${o.id}">Cancelar</button>
-                     <button type="button" class="btn btn-danger btn-sm" data-delete-order="${o.id}" style="background-color: #8B0000; border-color: #8B0000;">Excluir</button>`
+                  ? `<button type="button" class="btn btn-danger btn-sm" data-cancel-order="${o.id}">Cancelar</button>`
                   : ""}
+                <button type="button" class="btn btn-danger btn-sm" data-delete-order="${o.id}" style="background-color: #8B0000; border-color: #8B0000;">Excluir</button>
               </td>
             </tr>
           `).join("") : `<tr><td colspan="4" class="empty-state">Nenhum pedido</td></tr>`}
@@ -746,7 +746,6 @@ async function renderInvoices() {
           <tr>
             <th>Cliente</th>
             <th>1ª Compra</th>
-            <th>Vencimento</th>
             <th style="text-align:right">Total Devido</th>
             <th></th>
           </tr>
@@ -756,9 +755,9 @@ async function renderInvoices() {
             <tr>
               <td><strong>${escapeHtml(inv.customer_name)}</strong></td>
               <td>${formatDateTime(inv.first_purchase).split(" ")[0]}</td>
-              <td>${formatDateTime(inv.due_date).split(" ")[0]}</td>
               <td style="text-align:right; font-weight:bold; color:var(--danger)">${formatMoney(inv.total)}</td>
               <td style="text-align:right">
+                <button class="btn btn-sm btn-secondary btn-detail-invoice" data-customer="${escapeHtml(inv.customer_name)}">Ver Detalhes</button>
                 <button class="btn btn-sm btn-primary btn-pay-invoice" data-customer="${escapeHtml(inv.customer_name)}" data-total="${inv.total}">Quitar Dívida</button>
               </td>
             </tr>
@@ -768,11 +767,55 @@ async function renderInvoices() {
     </div>
   `;
 
+  els.pageContent.querySelectorAll(".btn-detail-invoice").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const customer = btn.dataset.customer;
+      const inv = invoices.find(i => i.customer_name === customer);
+      if (inv) openInvoiceDetailModal(inv);
+    });
+  });
+
   els.pageContent.querySelectorAll(".btn-pay-invoice").forEach((btn) => {
     btn.addEventListener("click", () => {
       openPayInvoiceModal(btn.dataset.customer, Number(btn.dataset.total));
     });
   });
+}
+
+function openInvoiceDetailModal(inv) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  
+  let html = `
+    <div class="modal" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+      <h3>Detalhes da Conta: ${escapeHtml(inv.customer_name)}</h3>
+      <p>Total Devido: <strong style="color:var(--danger)">${formatMoney(inv.total)}</strong></p>
+      <hr style="margin: 10px 0;">
+  `;
+  
+  inv.orders.forEach(o => {
+    html += `
+      <div style="margin-bottom: 12px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+        <strong>Pedido #${o.id} - ${formatDateTime(o.created_at)}</strong> (Subtotal: ${formatMoney(o.total)})
+        <ul style="margin: 5px 0 0 20px; font-size: 0.9em; color: var(--text-muted);">
+          ${o.items.map(i => `
+            <li>${i.quantity}x ${escapeHtml(i.product_name)} - ${formatMoney(i.subtotal)}</li>
+          `).join("")}
+        </ul>
+      </div>
+    `;
+  });
+
+  html += `
+      <div class="actions" style="margin-top:18px">
+        <button type="button" class="btn btn-secondary" id="close-detail">Fechar</button>
+      </div>
+    </div>
+  `;
+  
+  backdrop.innerHTML = html;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector("#close-detail").addEventListener("click", () => backdrop.remove());
 }
 
 function openPayInvoiceModal(customerName, total) {

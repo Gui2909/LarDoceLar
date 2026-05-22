@@ -603,8 +603,6 @@ def delete_order(
     current_order = db.query(Order).filter(Order.id == order_id).first()
     if current_order is None:
         raise HTTPException(status_code=404, detail="Pedido nao encontrado")
-    if current_order.status != "ABERTO":
-        raise HTTPException(status_code=400, detail="Apenas pedido aberto pode ser excluido")
 
     db.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
     db.delete(current_order)
@@ -831,14 +829,26 @@ def list_invoices(db: Session = Depends(get_db), current_user: User = Depends(ge
                 invoices[o.customer_name]["first_purchase"] = o.created_at
         
         invoices[o.customer_name]["total"] += o.total
-        invoices[o.customer_name]["orders"].append(o.id)
         
-    result = []
-    from datetime import timedelta
-    for customer, data in invoices.items():
-        data["due_date"] = data["first_purchase"] + timedelta(days=30)
-        result.append(data)
+        items = db.query(OrderItem).filter(OrderItem.order_id == o.id).all()
+        order_items_data = []
+        for i in items:
+            p = db.query(Product).filter(Product.id == i.product_id).first()
+            order_items_data.append({
+                "product_name": p.name if p else "Removido",
+                "quantity": i.quantity,
+                "price": i.price,
+                "subtotal": i.quantity * i.price
+            })
+            
+        invoices[o.customer_name]["orders"].append({
+            "id": o.id,
+            "created_at": o.created_at,
+            "total": o.total,
+            "items": order_items_data
+        })
         
+    result = list(invoices.values())
     return result
 
 @app.post("/invoices/{customer_name}/pay")
