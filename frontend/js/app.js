@@ -422,9 +422,12 @@ function openCheckoutModal(order) {
         if (!result) return;
         backdrop.remove();
         toast(`Venda concluída! Troco: ${formatMoney(result.troco)}`, "success");
-        state.currentOrder = null;
+        if (state.currentOrder && state.currentOrder.id === order.id) {
+            state.currentOrder = null;
+        }
         refreshCashBadge();
-        renderPdv();
+        if (state.view === "pdv") renderPdv();
+        if (state.view === "orders") renderOrders();
       });
     }
   };
@@ -453,6 +456,7 @@ async function renderOrders() {
               <td>${formatMoney(o.total)}</td>
               <td class="actions">
                 <button type="button" class="btn btn-secondary btn-sm" data-view-order="${o.id}">Ver</button>
+                ${o.status === "ABERTO" ? `<button type="button" class="btn btn-primary btn-sm" data-pay-order='${JSON.stringify({id: o.id, total: o.total}).replace(/'/g, "&#39;")}'>Pagar</button>` : ""}
                 ${o.status === "ABERTO" && state.user.role === "admin"
                   ? `<button type="button" class="btn btn-danger btn-sm" data-cancel-order="${o.id}">Cancelar</button>`
                   : ""}
@@ -468,6 +472,12 @@ async function renderOrders() {
 
   document.querySelectorAll("[data-view-order]").forEach((btn) => {
     btn.addEventListener("click", async () => showOrderDetail(Number(btn.dataset.viewOrder)));
+  });
+  document.querySelectorAll("[data-pay-order]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const order = JSON.parse(btn.dataset.payOrder);
+      openCheckoutModal(order);
+    });
   });
   document.querySelectorAll("[data-cancel-order]").forEach((btn) => {
     btn.addEventListener("click", () => openCancelModal(Number(btn.dataset.cancelOrder)));
