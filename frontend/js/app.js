@@ -346,43 +346,91 @@ function bindCartActions(orderId) {
 function openCheckoutModal(order) {
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
-  backdrop.innerHTML = `
-    <div class="modal">
-      <h3>Finalizar venda</h3>
-      <p>Total: <strong>${formatMoney(order.total)}</strong></p>
-      <label>Forma de pagamento</label>
-      <select id="pay-method">
-        <option value="DINHEIRO">Dinheiro</option>
-        <option value="PIX">PIX</option>
-        <option value="CARTAO_CREDITO">Cartão de Crédito</option>
-        <option value="CARTAO_DEBITO">Cartão de Débito</option>
-        <option value="FATURADO"> Fiado </option>
-      </select>
-      <label>Valor recebido</label>
-      <input type="number" id="pay-amount" min="0.01" step="0.01" value="${order.total.toFixed(2)}">
-      <div class="actions" style="margin-top:18px">
-        <button type="button" class="btn btn-primary" id="confirm-checkout">Confirmar</button>
-        <button type="button" class="btn btn-secondary" id="cancel-checkout">Cancelar</button>
-      </div>
-    </div>
-  `;
   document.body.appendChild(backdrop);
+  
+  let payments = [];
+  
+  const render = () => {
+    const totalReceived = payments.reduce((acc, p) => acc + p.amount, 0);
+    const remaining = Math.max(0, order.total - totalReceived);
+    
+    backdrop.innerHTML = `
+      <div class="modal">
+        <h3>Finalizar venda</h3>
+        <p>Total do Pedido: <strong>${formatMoney(order.total)}</strong></p>
+        
+        <div style="margin-bottom: 15px;">
+          ${payments.map((p, idx) => `
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+              <span>${p.method}</span>
+              <span>
+                ${formatMoney(p.amount)} 
+                <button type="button" class="btn btn-sm btn-danger btn-remove-pay" data-idx="${idx}" style="padding:2px 6px; margin-left:5px;">×</button>
+              </span>
+            </div>
+          `).join("")}
+          ${payments.length ? `<hr style="margin:10px 0">` : ""}
+          <p>Falta Receber: <strong style="color:var(--danger)">${formatMoney(remaining)}</strong></p>
+        </div>
+        
+        <div style="background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:15px;">
+          <label style="margin-top:0">Adicionar Pagamento</label>
+          <div style="display:flex; gap:8px; margin-top:5px;">
+            <select id="pay-method" style="flex:1">
+              <option value="DINHEIRO">Dinheiro</option>
+              <option value="PIX">PIX</option>
+              <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+              <option value="CARTAO_DEBITO">Cartão de Débito</option>
+              <option value="FATURADO">Fiado</option>
+            </select>
+            <input type="number" id="pay-amount" min="0.01" step="0.01" value="${remaining.toFixed(2)}" style="width:100px;">
+            <button type="button" class="btn btn-secondary" id="add-pay">Add</button>
+          </div>
+        </div>
 
-  backdrop.querySelector("#cancel-checkout").addEventListener("click", () => backdrop.remove());
+        <div class="actions" style="margin-top:18px">
+          <button type="button" class="btn btn-primary" id="confirm-checkout" ${totalReceived < order.total ? "disabled" : ""}>Confirmar</button>
+          <button type="button" class="btn btn-secondary" id="cancel-checkout">Cancelar</button>
+        </div>
+      </div>
+    `;
+
+    backdrop.querySelectorAll(".btn-remove-pay").forEach(btn => {
+      btn.addEventListener("click", () => {
+        payments.splice(Number(btn.dataset.idx), 1);
+        render();
+      });
+    });
+
+    backdrop.querySelector("#add-pay").addEventListener("click", () => {
+      const method = backdrop.querySelector("#pay-method").value;
+      const amount = Number(backdrop.querySelector("#pay-amount").value);
+      if (amount > 0) {
+        payments.push({ method, amount });
+        render();
+      }
+    });
+
+    backdrop.querySelector("#cancel-checkout").addEventListener("click", () => backdrop.remove());
+    
+    const confirmBtn = backdrop.querySelector("#confirm-checkout");
+    if (!confirmBtn.disabled) {
+      confirmBtn.addEventListener("click", async () => {
+        const result = await withError(() =>
+          endpoints.checkout(order.id, { payments })
+        );
+        if (!result) return;
+        backdrop.remove();
+        toast(`Venda concluída! Troco: ${formatMoney(result.troco)}`, "success");
+        state.currentOrder = null;
+        refreshCashBadge();
+        renderPdv();
+      });
+    }
+  };
+  
+  render();
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
-  backdrop.querySelector("#confirm-checkout").addEventListener("click", async () => {
-    const payment_method = backdrop.querySelector("#pay-method").value;
-    const amount_received = Number(backdrop.querySelector("#pay-amount").value);
-    const result = await withError(() =>
-      endpoints.checkout(order.id, { payment_method, amount_received })
-    );
-    if (!result) return;
-    backdrop.remove();
-    toast(`Venda concluída! Troco: ${formatMoney(result.troco)}`, "success");
-    state.currentOrder = null;
-    refreshCashBadge();
-    renderPdv();
-  });
 }
 
 async function renderOrders() {
@@ -855,9 +903,19 @@ function openPayInvoiceModal(customerName, total) {
 async function renderReports() {
   const today = new Date().toISOString().slice(0, 10);
   els.pageContent.innerHTML = `
-    <div class="card">
-      <h3>Relatório por Período</h3>
-      <div class="form-row">
+    <div class="card no-print">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Relatórios</h3>
+        <button type="button" class="btn btn-secondary" onclick="window.print()">🖨️ Salvar PDF / Imprimir</button>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <div>
+          <label>Tipo de Relatório</label>
+          <select id="report-type">
+            <option value="period">Fluxo de Caixa</option>
+            <option value="products">Produtos Vendidos</option>
+          </select>
+        </div>
         <div>
           <label>Data Inicial</label>
           <input type="date" id="start-date" value="${today}">
@@ -868,46 +926,94 @@ async function renderReports() {
         </div>
       </div>
       <button type="button" class="btn btn-primary" id="btn-report" style="margin-top:12px">Gerar relatório</button>
-      <div id="report-result" style="margin-top:16px"></div>
     </div>
+    <div id="report-result" style="margin-top:16px"></div>
   `;
 
+  const formatDt = (d) => d.split('-').reverse().join('/');
+
   const loadReport = async () => {
+    const type = document.getElementById("report-type").value;
     const startDate = document.getElementById("start-date").value;
     const endDate = document.getElementById("end-date").value;
-    const report = await withError(() => endpoints.periodReport(startDate, endDate));
-    if (!report) return;
-    const paymentMap = {
-      "DINHEIRO": "Dinheiro",
-      "PIX": "Pix",
-      "CARTAO_CREDITO": "Cartão de Crédito",
-      "CARTAO_DEBITO": "Cartão de Débito",
-      "BOLETO": "Boleto"
-    };
-    const methods = Object.entries(report.by_method || {})
-      .map(([k, v]) => `<li style="display: flex; justify-content: space-between; gap: 8px;"><span>${paymentMap[k] || k}</span><span style="text-align: right; word-break: break-all;">${formatMoney(v)}</span></li>`).join("");
-      
-    const formatDt = (d) => d.split('-').reverse().join('/');
     
-    document.getElementById("report-result").innerHTML = `
-      <div class="report-receipt">
-        <div class="receipt-header">
-          <h2>LarDoceLar</h2>
-          <p>Operador do caixa: ${state.user.name} (${state.user.role})</p>
-          <p>Vendas de ${formatDt(report.start_date)} até ${formatDt(report.end_date)}</p>
+    if (type === "period") {
+      const report = await withError(() => endpoints.periodReport(startDate, endDate));
+      if (!report) return;
+      const paymentMap = {
+        "DINHEIRO": "Dinheiro",
+        "PIX": "Pix",
+        "CARTAO_CREDITO": "Cartão de Crédito",
+        "CARTAO_DEBITO": "Cartão de Débito",
+        "FATURADO": "Fiado",
+        "MÚLTIPLO": "Múltiplo",
+        "BOLETO": "Boleto"
+      };
+      const methods = Object.entries(report.by_method || {})
+        .map(([k, v]) => `<li style="display: flex; justify-content: space-between; gap: 8px;"><span>${paymentMap[k] || k}</span><span style="text-align: right; word-break: break-all;">${formatMoney(v)}</span></li>`).join("");
+        
+      document.getElementById("report-result").innerHTML = `
+        <div class="report-receipt">
+          <div class="receipt-header">
+            <h2>LarDoceLar</h2>
+            <p>Operador: ${state.user.name}</p>
+            <p>Vendas de ${formatDt(startDate)} até ${formatDt(endDate)}</p>
+          </div>
+          <div class="receipt-body">
+            <p><strong>Lançamentos:</strong> ${report.items}</p>
+            <p><strong>Total movimentado:</strong> ${formatMoney(report.total)}</p>
+            <hr style="border: none; border-top: 1px dashed var(--text-muted); margin: 12px 0;">
+            <p style="margin-bottom:8px"><strong>Por método de pagamento:</strong></p>
+            <ul>${methods || "<li><span>Nenhum</span><span>—</span></li>"}</ul>
+          </div>
+          <div class="receipt-footer">
+            <p>Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+          </div>
         </div>
-        <div class="receipt-body">
-          <p><strong>Lançamentos:</strong> ${report.items}</p>
-          <p><strong>Total movimentado:</strong> ${formatMoney(report.total)}</p>
-          <hr style="border: none; border-top: 1px dashed var(--text-muted); margin: 12px 0;">
-          <p style="margin-bottom:8px"><strong>Por método de pagamento:</strong></p>
-          <ul>${methods || "<li><span>Nenhum</span><span>—</span></li>"}</ul>
+      `;
+    } else {
+      const products = await withError(() => endpoints.productsReport(startDate, endDate));
+      if (!products) return;
+      
+      const totalRev = products.reduce((acc, p) => acc + p.total, 0);
+      const totalQty = products.reduce((acc, p) => acc + p.quantity, 0);
+
+      document.getElementById("report-result").innerHTML = `
+        <div class="report-receipt" style="max-width: 600px;">
+          <div class="receipt-header">
+            <h2>LarDoceLar - Produtos Vendidos</h2>
+            <p>Operador: ${state.user.name}</p>
+            <p>De ${formatDt(startDate)} até ${formatDt(endDate)}</p>
+          </div>
+          <div class="receipt-body">
+            <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+              <thead>
+                <tr style="border-bottom:1px solid #ddd;">
+                  <th style="padding:4px; text-align:left;">Produto</th>
+                  <th style="padding:4px; text-align:right;">Qtd</th>
+                  <th style="padding:4px; text-align:right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${products.length ? products.map(p => `
+                  <tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:4px;">${escapeHtml(p.product_name)}</td>
+                    <td style="padding:4px; text-align:right;">${p.quantity}</td>
+                    <td style="padding:4px; text-align:right;">${formatMoney(p.total)}</td>
+                  </tr>
+                `).join("") : '<tr><td colspan="3" style="text-align:center; padding:10px;">Nenhuma venda no período.</td></tr>'}
+              </tbody>
+            </table>
+            <hr style="border: none; border-top: 1px dashed var(--text-muted); margin: 12px 0;">
+            <p style="text-align:right;"><strong>Total Itens:</strong> ${totalQty}</p>
+            <p style="text-align:right;"><strong>Faturamento:</strong> ${formatMoney(totalRev)}</p>
+          </div>
+          <div class="receipt-footer">
+            <p>Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+          </div>
         </div>
-        <div class="receipt-footer">
-          <p>Gerado em ${new Date().toLocaleString('pt-BR')}</p>
-        </div>
-      </div>
-    `;
+      `;
+    }
   };
 
   document.getElementById("btn-report").addEventListener("click", loadReport);

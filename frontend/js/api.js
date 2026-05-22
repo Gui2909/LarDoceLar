@@ -82,6 +82,7 @@ export const endpoints = {
   listCashflow: () => api("/cashflow"),
   getCashReport: () => api("/cash/report"),
   periodReport: (startDate, endDate) => api(`/reports/period?start_date=${startDate}&end_date=${endDate}`),
+  productsReport: (startDate, endDate) => api(`/reports/products?start_date=${startDate}&end_date=${endDate}`),
 };
 
 export function formatMoney(value) {

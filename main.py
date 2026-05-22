@@ -137,9 +137,12 @@ class UpdateItemRequest(BaseModel):
 class OrderCreate(BaseModel):
     customer_name: str
 
+class PaymentAmount(BaseModel):
+    method: str
+    amount: float = Field(gt=0)
+
 class CheckoutRequest(BaseModel):
-    payment_method: str
-    amount_received: float = Field(gt=0)
+    payments: list[PaymentAmount]
 
 
 class CashOpenRequest(BaseModel):
@@ -531,31 +534,47 @@ def checkout_order(
         raise HTTPException(status_code=400, detail="Caixa fechado. Abra o caixa antes do checkout")
 
     total = recalculate_order_total(db, order_id)
-    if data.amount_received < total:
+    total_received = sum(p.amount for p in data.payments)
+    
+    if total_received < total:
         raise HTTPException(status_code=400, detail="Valor recebido menor que o total")
 
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
 
     current_order.status = "FECHADO"
-    current_order.payment_method = data.payment_method.upper()
+    
+    # Check if Faturado is used
+    methods_used = [p.method.upper() for p in data.payments]
+    if len(methods_used) > 1:
+        current_order.payment_method = "MÚLTIPLO"
+    elif len(methods_used) == 1:
+        current_order.payment_method = methods_used[0]
+    else:
+        current_order.payment_method = "NAO_INFORMADO"
 
-    if current_order.payment_method == "FATURADO":
+    if "FATURADO" in methods_used:
+        # If FATURADO is mixed, we consider it PENDENTE until fully paid later.
+        # But realistically we just set the overall order payment_status to PENDENTE if FATURADO is used.
         current_order.payment_status = "PENDENTE"
     else:
         current_order.payment_status = "PAGO"
-        db.add(
-            CashFlow(
-                order_id=current_order.id,
-                cash_session_id=session.id,
-                type="ENTRADA",
-                amount=total,
-                description=f"Venda pedido {current_order.id} (sessao {session.id})",
-                payment_method=current_order.payment_method,
-            )
-        )
         
+    for p in data.payments:
+        # Do not add CashFlow for FATURADO directly as it's not physical money entering yet.
+        if p.method.upper() != "FATURADO":
+            db.add(
+                CashFlow(
+                    order_id=current_order.id,
+                    cash_session_id=session.id,
+                    type="ENTRADA",
+                    amount=p.amount,
+                    description=f"Venda pedido {current_order.id} (sessao {session.id})",
+                    payment_method=p.method.upper(),
+                )
+            )
+            
     db.commit()
-    return {"message": "Pedido fechado", "total": total, "troco": data.amount_received - total}
+    return {"message": "Pedido fechado", "total": total, "troco": total_received - total}
 
 
 @app.post("/orders/{order_id}/cancel")
@@ -919,6 +938,50 @@ def period_report(
         "by_method": by_method,
         "items": len(movements)
     }
+
+
+@app.get("/reports/products")
+def products_report(
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin"})
+    
+    # Get all closed orders in the period
+    orders = db.query(Order).filter(
+        func.date(Order.created_at) >= start_date,
+        func.date(Order.created_at) <= end_date,
+        Order.status == "FECHADO"
+    ).all()
+    
+    order_ids = [o.id for o in orders]
+    
+    if not order_ids:
+        return []
+        
+    items = db.query(OrderItem).filter(OrderItem.order_id.in_(order_ids)).all()
+    
+    product_stats = {}
+    for item in items:
+        pid = item.product_id
+        if pid not in product_stats:
+            p = db.query(Product).filter(Product.id == pid).first()
+            product_stats[pid] = {
+                "product_id": pid,
+                "product_name": p.name if p else "Removido",
+                "quantity": 0,
+                "total": 0.0
+            }
+        
+        product_stats[pid]["quantity"] += item.quantity
+        product_stats[pid]["total"] += (item.quantity * item.price)
+        
+    # Sort by quantity descending
+    result = list(product_stats.values())
+    result.sort(key=lambda x: x["quantity"], reverse=True)
+    return result
 
 
 @app.get("/reports/daily")
