@@ -827,7 +827,7 @@ async function renderInvoices() {
           ${invoices.map((inv) => `
             <tr>
               <td><strong>${escapeHtml(inv.customer_name)}</strong></td>
-              <td>${formatDateTime(inv.first_purchase).split(" ")[0]}</td>
+              <td>${formatDateTime(inv.first_purchase).split(" ")[0].replace(",", "")}</td>
               <td style="text-align:right; font-weight:bold; color:var(--danger)">${formatMoney(inv.total)}</td>
               <td style="text-align:right">
                 <button class="btn btn-sm btn-secondary btn-detail-invoice" data-customer="${escapeHtml(inv.customer_name)}">Ver Detalhes</button>
