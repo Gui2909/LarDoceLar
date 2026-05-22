@@ -604,6 +604,7 @@ def delete_order(
     if current_order is None:
         raise HTTPException(status_code=404, detail="Pedido nao encontrado")
 
+    db.query(CashFlow).filter(CashFlow.order_id == order_id).delete()
     db.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
     db.delete(current_order)
     
