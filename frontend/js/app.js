@@ -209,6 +209,7 @@ async function renderPdv() {
         </div>
         <div class="cart-total"><span>Total</span><span>${formatMoney(order.total)}</span></div>
         <button type="button" class="btn btn-primary btn-block" id="btn-checkout" ${order.items.length ? "" : "disabled"}>Finalizar venda</button>
+        <button type="button" class="btn btn-secondary btn-block" id="btn-finish-order">Concluir pedido</button>
         <button type="button" class="btn btn-secondary btn-block" id="btn-new-order">Novo pedido</button>
       </div>
     </div>
@@ -226,6 +227,10 @@ async function renderPdv() {
 
   bindCartActions(order.id);
   document.getElementById("btn-checkout")?.addEventListener("click", () => openCheckoutModal(order));
+  document.getElementById("btn-finish-order")?.addEventListener("click", () => {
+    state.currentOrder = null;
+    renderPdv();
+  });
   document.getElementById("btn-new-order")?.addEventListener("click", async () => {
     const customerName = await promptCustomerName();
     if (!customerName || customerName.length < 2) {
