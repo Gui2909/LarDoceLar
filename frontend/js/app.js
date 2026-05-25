@@ -39,6 +39,21 @@ const NAV_ITEMS = [
   { id: "users", label: "👤 Usuários", roles: ["admin"] },
 ];
 
+const PAYMENT_METHODS_MAP = {
+  "DINHEIRO": "Dinheiro",
+  "PIX": "Pix",
+  "CARTAO_CREDITO": "Cartão de Crédito",
+  "CARTAO_DEBITO": "Cartão de Débito",
+  "BOLETO": "Boleto",
+  "FIADO": "Fiado",
+  "FATURADO": "Fiado",
+  "MÚLTIPLO": "Múltiplo"
+};
+function formatPaymentMethod(method) {
+  if (!method || method === "NA") return "—";
+  return PAYMENT_METHODS_MAP[method] || method;
+}
+
 function toast(message, type = "info") {
   const node = document.createElement("div");
   node.className = `toast ${type === "error" ? "error" : type === "success" ? "success" : ""}`;
@@ -759,7 +774,7 @@ async function renderCash() {
                 <td>${m.id}</td>
                 <td>${m.type}</td>
                 <td>${formatMoney(m.amount)}</td>
-                <td>${m.payment_method || "—"}</td>
+                <td>${formatPaymentMethod(m.payment_method)}</td>
                 <td>${escapeHtml(m.description || "—")}</td>
                 <td>${formatDateTime(m.created_at)}</td>
               </tr>
@@ -970,17 +985,8 @@ async function renderReports() {
     if (type === "period") {
       const report = await withError(() => endpoints.periodReport(startDate, endDate));
       if (!report) return;
-      const paymentMap = {
-        "DINHEIRO": "Dinheiro",
-        "PIX": "Pix",
-        "CARTAO_CREDITO": "Cartão de Crédito",
-        "CARTAO_DEBITO": "Cartão de Débito",
-        "FATURADO": "Fiado",
-        "MÚLTIPLO": "Múltiplo",
-        "BOLETO": "Boleto"
-      };
       const methods = Object.entries(report.by_method || {})
-        .map(([k, v]) => `<li style="display: flex; justify-content: space-between; gap: 8px;"><span>${paymentMap[k] || k}</span><span style="text-align: right; word-break: break-all;">${formatMoney(v)}</span></li>`).join("");
+        .map(([k, v]) => `<li style="display: flex; justify-content: space-between; gap: 8px;"><span>${formatPaymentMethod(k)}</span><span style="text-align: right; word-break: break-all;">${formatMoney(v)}</span></li>`).join("");
         
       document.getElementById("report-result").innerHTML = `
         <div class="report-receipt">
