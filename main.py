@@ -679,6 +679,7 @@ def print_order(
     from datetime import datetime
     
     lines = []
+    lines.append("\x1b\x40") # ESC/POS Initialize Printer
     lines.append("          LAR DOCE LAR          ")
     lines.append("        Cupom nao Fiscal        ")
     lines.append("--------------------------------")
