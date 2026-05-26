@@ -696,14 +696,17 @@ def print_order(
     lines.append("--------------------------------")
     
     for item in items:
-        name = item.product_name[:17]
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+        product_name = product.name if product else "Produto Removido"
+        name = product_name[:17]
         qty = str(item.quantity)
-        price_total = f"{item.subtotal:.2f}"
+        item_subtotal = item.quantity * item.price
+        price_total = f"{item_subtotal:.2f}"
         lines.append(f"{name:<18} {qty:>3} {price_total:>9}")
         
     lines.append("--------------------------------")
     
-    subtotal = sum(item.subtotal for item in items)
+    subtotal = sum(item.quantity * item.price for item in items)
     lines.append(f"Subtotal:            R$ {subtotal:>10.2f}")
     
     discount = float(getattr(current_order, "discount", 0.0) or 0.0)
