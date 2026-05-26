@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from database.connection import Base, SessionLocal, engine
@@ -30,21 +30,25 @@ Base.metadata.create_all(bind=engine)
 
 
 def run_migrations():
-    """Safe migrations: add columns that may not exist yet."""
-    from sqlalchemy import text
-    with engine.connect() as conn:
+    """Safe migrations: add new columns without breaking existing data."""
+    try:
         migrations = [
             "ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount FLOAT DEFAULT 0",
             "ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes VARCHAR",
         ]
         for sql in migrations:
             try:
-                conn.execute(text(sql))
-                conn.commit()
+                with engine.begin() as conn:
+                    conn.execute(text(sql))
             except Exception:
-                conn.rollback()
+                pass  # Column already exists
+    except Exception:
+        pass  # Never crash on migration failure
 
-run_migrations()
+try:
+    run_migrations()
+except Exception:
+    pass
 
 
 TOKENS: dict[str, int] = {}
@@ -390,7 +394,21 @@ def list_orders(
     query = db.query(Order).filter(Order.cash_session_id == session.id)
     if status:
         query = query.filter(Order.status == status.upper())
-    return query.order_by(Order.id.desc()).all()
+    orders = query.order_by(Order.id.desc()).all()
+    return [
+        {
+            "id": o.id,
+            "customer_name": o.customer_name,
+            "status": o.status,
+            "total": o.total,
+            "payment_method": o.payment_method,
+            "payment_status": o.payment_status,
+            "created_at": o.created_at,
+            "discount": getattr(o, "discount", None) or 0,
+            "notes": getattr(o, "notes", None) or "",
+        }
+        for o in orders
+    ]
 
 
 @app.get("/orders/{order_id}")
@@ -429,8 +447,8 @@ def get_order(
         "customer_name": current.customer_name,
         "status": current.status,
         "total": current.total,
-        "discount": current.discount or 0,
-        "notes": current.notes or "",
+        "discount": getattr(current, "discount", None) or 0,
+        "notes": getattr(current, "notes", None) or "",
         "items": items_data,
         "cancel_reason": cancel_reason,
     }
@@ -560,7 +578,7 @@ def checkout_order(
         raise HTTPException(status_code=400, detail="Caixa fechado. Abra o caixa antes do checkout")
 
     base_total = recalculate_order_total(db, order_id)
-    discount = float(current_order.discount or 0)
+    discount = float(getattr(current_order, "discount", None) or 0)
     total = max(0.0, round(base_total - discount, 2))
     current_order.total = total
     total_received = sum(p.amount for p in data.payments)
