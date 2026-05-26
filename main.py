@@ -737,8 +737,8 @@ def print_order(
     ticket = "\n".join(lines)
     errors = []
     
-    # Method 1: Direct open writing
-    for port in [r"\\localhost\IMP", r"\\127.0.0.1\IMP", "IMP"]:
+    # Method 1: Direct open writing (trying lowercase 'imp' first, then uppercase 'IMP')
+    for port in [r"\\localhost\imp", r"\\127.0.0.1\imp", "imp", r"\\localhost\IMP", r"\\127.0.0.1\IMP", "IMP"]:
         try:
             with open(port, "wb") as f:
                 f.write(ticket.encode("cp860", errors="ignore"))
@@ -746,7 +746,7 @@ def print_order(
         except Exception as e:
             errors.append(f"direct {port}: {str(e)}")
             
-    # Method 2: Temporary file with print/copy commands
+    # Method 2: Temporary file with print/copy commands (trying both imp and IMP)
     try:
         temp_fd, temp_path = tempfile.mkstemp(suffix=".txt")
         try:
@@ -754,6 +754,10 @@ def print_order(
                 tmp.write(ticket.encode("cp860", errors="ignore"))
             
             for print_cmd in [
+                ["cmd", "/c", f"copy /B {temp_path} \\\\127.0.0.1\\imp"],
+                ["cmd", "/c", f"copy /B {temp_path} \\\\localhost\\imp"],
+                ["cmd", "/c", f"copy /B {temp_path} imp"],
+                ["cmd", "/c", f"print /D:imp {temp_path}"],
                 ["cmd", "/c", f"copy /B {temp_path} \\\\127.0.0.1\\IMP"],
                 ["cmd", "/c", f"copy /B {temp_path} \\\\localhost\\IMP"],
                 ["cmd", "/c", f"copy /B {temp_path} IMP"],
