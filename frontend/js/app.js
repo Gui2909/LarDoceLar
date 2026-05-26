@@ -182,12 +182,12 @@ async function renderDashboard() {
         <div class="dash-card__label">Pedidos Fechados</div>
         <div class="dash-card__value">${data.orders_closed_today}</div>
       </div>
-      <div class="dash-card dash-card--warning">
+      <div class="dash-card dash-card--warning" id="dash-open-orders" style="cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 16px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='none'; this.style.boxShadow='none';">
         <div class="dash-card__icon">🔓</div>
         <div class="dash-card__label">Pedidos Abertos</div>
         <div class="dash-card__value">${data.orders_open_now}</div>
       </div>
-      <div class="dash-card dash-card--danger">
+      <div class="dash-card dash-card--danger" id="dash-fiado-pendente" style="cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 16px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='none'; this.style.boxShadow='none';">
         <div class="dash-card__icon">📄</div>
         <div class="dash-card__label">Fiado Pendente</div>
         <div class="dash-card__value">${formatMoney(data.total_fiado_pendente)}</div>
@@ -211,6 +211,8 @@ async function renderDashboard() {
     </div>
   `;
   document.getElementById("btn-dash-refresh")?.addEventListener("click", renderDashboard);
+  document.getElementById("dash-open-orders")?.addEventListener("click", () => navigate("orders"));
+  document.getElementById("dash-fiado-pendente")?.addEventListener("click", () => navigate("invoices"));
 }
 
 // ─── PDV ─────────────────────────────────────────────────────────────────────
