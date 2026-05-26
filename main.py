@@ -741,6 +741,13 @@ def print_order(
     ticket = "\n".join(lines)
     errors = []
     
+    # Debug log startup
+    try:
+        with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+            f_debug.write(f"[{datetime.now()}] --- PRINT ORDER REQUESTED (Order #{order_id}) ---\n")
+    except Exception:
+        pass
+    
     # Method 0: Direct TCP Network Socket to Printer IP (192.168.5.98:9100)
     # Since it is a network printer, sending directly to its raw port 9100 is extremely reliable.
     try:
@@ -749,8 +756,18 @@ def print_order(
             s.settimeout(5.0)
             s.connect(("192.168.5.98", 9100))
             s.sendall(ticket.encode("cp860", errors="ignore"))
+        try:
+            with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                f_debug.write(f"[{datetime.now()}] Method 0 (Socket TCP) SUCCESS\n")
+        except Exception:
+            pass
         return {"status": "success", "method": "network socket (192.168.5.98:9100)"}
     except Exception as e:
+        try:
+            with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                f_debug.write(f"[{datetime.now()}] Method 0 (Socket TCP) FAILED: {str(e)}\n")
+        except Exception:
+            pass
         errors.append(f"socket network 192.168.5.98:9100: {str(e)}")
 
     # Method 1: Direct open writing (trying lowercase 'imp' first, then uppercase 'IMP')
@@ -758,8 +775,18 @@ def print_order(
         try:
             with open(port, "wb") as f:
                 f.write(ticket.encode("cp860", errors="ignore"))
+            try:
+                with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                    f_debug.write(f"[{datetime.now()}] Method 1 (Direct Open: {port}) SUCCESS\n")
+            except Exception:
+                pass
             return {"status": "success", "method": f"direct ({port})"}
         except Exception as e:
+            try:
+                with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                    f_debug.write(f"[{datetime.now()}] Method 1 (Direct Open: {port}) FAILED: {str(e)}\n")
+            except Exception:
+                pass
             errors.append(f"direct {port}: {str(e)}")
             
     # Method 2: Temporary file with print/copy commands (trying both imp and IMP)
@@ -781,8 +808,18 @@ def print_order(
             ]:
                 try:
                     subprocess.run(print_cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    try:
+                        with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                            f_debug.write(f"[{datetime.now()}] Method 2 (CMD: {' '.join(print_cmd)}) SUCCESS\n")
+                    except Exception:
+                        pass
                     return {"status": "success", "method": f"cmd ({' '.join(print_cmd)})"}
                 except Exception as e:
+                    try:
+                        with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                            f_debug.write(f"[{datetime.now()}] Method 2 (CMD: {' '.join(print_cmd)}) FAILED: {str(e)}\n")
+                    except Exception:
+                        pass
                     errors.append(f"cmd {' '.join(print_cmd)}: {str(e)}")
         finally:
             if os.path.exists(temp_path):
