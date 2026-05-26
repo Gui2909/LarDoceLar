@@ -16,3 +16,5 @@ class Order(Base):
     payment_status = Column(String, default="PAGO")
     payment_method = Column(String, nullable=True)
     cash_session_id = Column(Integer, nullable=True)
+    discount = Column(Float, nullable=True, default=0)
+    notes = Column(String, nullable=True)

@@ -6,13 +6,14 @@ import {
   clearSession,
   formatMoney,
   formatDateTime,
-} from "./api.js?v=2";
+} from "./api.js?v=3";
 
 const state = {
   user: null,
   view: "pdv",
   currentOrder: null,
   cashStatus: null,
+  pdvFilter: { search: "", category: "Todos" },
 };
 
 const els = {
@@ -30,6 +31,7 @@ const els = {
 };
 
 const NAV_ITEMS = [
+  { id: "dashboard", label: "🏠 Início", roles: ["admin", "cashier"] },
   { id: "pdv", label: "🛒 PDV", roles: ["admin", "cashier"] },
   { id: "orders", label: "📋 Pedidos", roles: ["admin", "cashier"] },
   { id: "products", label: "📦 Produtos", roles: ["admin"] },
@@ -92,14 +94,14 @@ async function showApp() {
   els.appShell.classList.remove("hidden");
   state.user = getUser();
   els.userInfo.textContent = `${state.user.name} (${state.user.role})`;
-  
+
   await refreshCashBadge();
   if (state.cashStatus && !state.cashStatus.open) {
     state.view = "cash";
     toast("Você precisa abrir o turno antes de usar o sistema.", "warning");
   }
-  
-  navigate(state.view || "pdv");
+
+  navigate(state.view || "dashboard");
 }
 
 function renderNav() {
@@ -131,13 +133,14 @@ async function refreshCashBadge() {
 }
 
 function navigate(view) {
-  if (view !== "cash" && state.cashStatus && !state.cashStatus.open) {
+  if (view !== "cash" && view !== "dashboard" && state.cashStatus && !state.cashStatus.open) {
     toast("Abertura de turno obrigatória. Abra o caixa primeiro.", "error");
     view = "cash";
   }
   state.view = view;
   renderNav();
   const titles = {
+    dashboard: "Início",
     pdv: "Ponto de Venda",
     orders: "Pedidos",
     products: "Produtos",
@@ -149,6 +152,7 @@ function navigate(view) {
   };
   els.pageTitle.textContent = titles[view] || "LarDoceLar";
   const renderers = {
+    dashboard: renderDashboard,
     pdv: renderPdv,
     orders: renderOrders,
     products: renderProducts,
@@ -160,6 +164,56 @@ function navigate(view) {
   renderers[view]?.();
 }
 
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+async function renderDashboard() {
+  els.pageContent.innerHTML = `<div class="empty-state">Carregando...</div>`;
+  const data = await withError(() => endpoints.dashboard());
+  if (!data) return;
+
+  els.pageContent.innerHTML = `
+    <div class="dashboard-grid">
+      <div class="dash-card dash-card--primary">
+        <div class="dash-card__icon">💰</div>
+        <div class="dash-card__label">Vendas Hoje</div>
+        <div class="dash-card__value">${formatMoney(data.total_today)}</div>
+      </div>
+      <div class="dash-card dash-card--success">
+        <div class="dash-card__icon">✅</div>
+        <div class="dash-card__label">Pedidos Fechados</div>
+        <div class="dash-card__value">${data.orders_closed_today}</div>
+      </div>
+      <div class="dash-card dash-card--warning">
+        <div class="dash-card__icon">🔓</div>
+        <div class="dash-card__label">Pedidos Abertos</div>
+        <div class="dash-card__value">${data.orders_open_now}</div>
+      </div>
+      <div class="dash-card dash-card--danger">
+        <div class="dash-card__icon">📄</div>
+        <div class="dash-card__label">Fiado Pendente</div>
+        <div class="dash-card__value">${formatMoney(data.total_fiado_pendente)}</div>
+      </div>
+    </div>
+    <div class="dash-status card" style="margin-top:20px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:2rem;">${data.cash_open ? "🟢" : "🔴"}</span>
+        <div>
+          <strong>Status do Caixa</strong>
+          <p style="margin:4px 0 0;color:var(--text-muted);">
+            ${data.cash_open
+              ? `Caixa aberto · Saldo estimado: <strong>${formatMoney(data.cash_balance)}</strong>`
+              : "Caixa fechado. Vá em <strong>Caixa</strong> para abrir o turno."}
+          </p>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:20px; text-align:right;">
+      <button class="btn btn-secondary btn-sm" id="btn-dash-refresh">🔄 Atualizar</button>
+    </div>
+  `;
+  document.getElementById("btn-dash-refresh")?.addEventListener("click", renderDashboard);
+}
+
+// ─── PDV ─────────────────────────────────────────────────────────────────────
 async function renderPdv() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando PDV...</div>`;
   const [products, cash] = await Promise.all([
@@ -200,29 +254,80 @@ async function renderPdv() {
     ? `<div class="alert warning">Caixa fechado. Abra o caixa (menu Caixa) antes de finalizar vendas.</div>`
     : "";
 
+  // Build unique categories list
+  const categories = ["Todos", ...new Set(products.map(p => p.category || "Sem categoria").sort())];
+
+  // Filter products
+  const search = state.pdvFilter.search.toLowerCase();
+  const catFilter = state.pdvFilter.category;
+  const filtered = products.filter(p => {
+    const matchCat = catFilter === "Todos" || (p.category || "Sem categoria") === catFilter;
+    const matchSearch = !search || p.name.toLowerCase().includes(search) || (p.category || "").toLowerCase().includes(search);
+    return matchCat && matchSearch;
+  });
+
+  const subtotal = order.items.reduce((s, i) => s + i.subtotal, 0);
+  const discount = order.discount || 0;
+  const finalTotal = Math.max(0, subtotal - discount);
+
   els.pageContent.innerHTML = `
     ${cashAlert}
     <div class="grid-2">
       <div>
         <div class="card">
           <h3>Produtos</h3>
+          <div class="pdv-search-bar">
+            <input type="text" id="pdv-search" placeholder="🔍 Buscar produto..." value="${escapeAttr(state.pdvFilter.search)}" autocomplete="off">
+          </div>
+          <div class="category-chips" id="category-chips">
+            ${categories.map(c => `
+              <button type="button" class="chip ${c === catFilter ? "chip--active" : ""}" data-cat="${escapeAttr(c)}">${escapeHtml(c)}</button>
+            `).join("")}
+          </div>
           <div class="grid-3" id="product-grid">
-            ${products.length ? products.map((p) => `
-              <div class="product-card" data-product-id="${p.id}">
+            ${filtered.length ? filtered.map((p) => `
+              <div class="product-card" data-product-id="${p.id}" data-product-price="${p.price}" data-product-name="${escapeAttr(p.name)}">
                 <div class="name">${escapeHtml(p.name)}</div>
                 <div class="meta">${escapeHtml(p.category || "Sem categoria")}</div>
                 <div class="price">${formatMoney(p.price)}</div>
               </div>
-            `).join("") : `<div class="empty-state">Cadastre produtos no menu Produtos.</div>`}
+            `).join("") : `<div class="empty-state" style="grid-column:1/-1">Nenhum produto encontrado.</div>`}
           </div>
         </div>
       </div>
       <div class="cart-panel card">
-        <h3>Pedido #${order.id} - ${escapeHtml(order.customer_name || 'Cliente')}</h3>
+        <h3>Pedido #${order.id} - ${escapeHtml(order.customer_name || "Cliente")}</h3>
         <div id="cart-items">
-          ${order.items.length ? order.items.map((item) => cartItemHtml(order.id, item)).join("") : `<div class="empty-state">Clique em um produto para adicionar</div>`}
+          ${order.items.length
+            ? order.items.map((item) => cartItemHtml(order.id, item)).join("")
+            : `<div class="empty-state">Clique em um produto para adicionar</div>`}
         </div>
-        <div class="cart-total"><span>Total</span><span>${formatMoney(order.total)}</span></div>
+
+        <div class="cart-discount-row">
+          <label style="margin:12px 0 4px;font-size:0.85rem;font-weight:600;">Desconto (R$)</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="discount-input" min="0" step="0.01" value="${discount.toFixed(2)}" style="flex:1;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-apply-discount">Aplicar</button>
+          </div>
+        </div>
+
+        <div class="cart-total">
+          <div>
+            <div>Subtotal</div>
+            ${discount > 0 ? `<div style="color:var(--success);font-size:0.85rem;">Desconto: −${formatMoney(discount)}</div>` : ""}
+          </div>
+          <div style="text-align:right;">
+            ${discount > 0 ? `<div style="text-decoration:line-through;color:var(--text-muted);font-size:0.9rem;">${formatMoney(subtotal)}</div>` : ""}
+            <div>${formatMoney(finalTotal)}</div>
+          </div>
+        </div>
+
+        <div class="cart-notes">
+          <label style="margin:8px 0 4px;font-size:0.85rem;font-weight:600;">Observação</label>
+          <textarea id="notes-input" rows="2" placeholder="Ex: sem cebola, entrega no balcão...">${escapeHtml(order.notes || "")}</textarea>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-save-notes" style="margin-top:6px;">💾 Salvar obs.</button>
+        </div>
+
         <button type="button" class="btn btn-primary btn-block" id="btn-checkout" ${order.items.length ? "" : "disabled"}>Finalizar venda</button>
         <button type="button" class="btn btn-secondary btn-block" id="btn-finish-order">Concluir pedido</button>
         <button type="button" class="btn btn-secondary btn-block" id="btn-new-order">Novo pedido</button>
@@ -230,22 +335,59 @@ async function renderPdv() {
     </div>
   `;
 
+  // Search filter
+  document.getElementById("pdv-search").addEventListener("input", (e) => {
+    state.pdvFilter.search = e.target.value;
+    renderPdv();
+  });
+
+  // Category chips
+  document.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      state.pdvFilter.category = chip.dataset.cat;
+      renderPdv();
+    });
+  });
+
+  // Add item with quantity modal
   document.querySelectorAll(".product-card").forEach((card) => {
     card.addEventListener("click", async () => {
+      const qty = await promptQuantity(card.dataset.productName);
+      if (!qty || qty < 1) return;
       await withError(
-        () => endpoints.addItem(order.id, { product_id: Number(card.dataset.productId), quantity: 1 }),
+        () => endpoints.addItem(order.id, { product_id: Number(card.dataset.productId), quantity: qty }),
         "Item adicionado"
       );
       renderPdv();
     });
   });
 
+  // Apply discount
+  document.getElementById("btn-apply-discount")?.addEventListener("click", async () => {
+    const d = parseFloat(document.getElementById("discount-input").value) || 0;
+    const ok = await withError(() => endpoints.setDiscount(order.id, d), "Desconto aplicado");
+    if (ok !== null) renderPdv();
+  });
+
+  // Save notes
+  document.getElementById("btn-save-notes")?.addEventListener("click", async () => {
+    const notes = document.getElementById("notes-input").value.trim();
+    await withError(() => endpoints.setNotes(order.id, notes), "Observação salva");
+  });
+
   bindCartActions(order.id);
-  document.getElementById("btn-checkout")?.addEventListener("click", () => openCheckoutModal(order));
+
+  document.getElementById("btn-checkout")?.addEventListener("click", () => {
+    const orderWithTotal = { ...order, total: finalTotal };
+    openCheckoutModal(orderWithTotal);
+  });
+
   document.getElementById("btn-finish-order")?.addEventListener("click", () => {
     state.currentOrder = null;
+    state.pdvFilter = { search: "", category: "Todos" };
     renderPdv();
   });
+
   document.getElementById("btn-new-order")?.addEventListener("click", async () => {
     const customerName = await promptCustomerName();
     if (!customerName || customerName.length < 2) {
@@ -253,10 +395,12 @@ async function renderPdv() {
       return;
     }
     state.currentOrder = await withError(() => endpoints.createOrder({ customer_name: customerName }), "Novo pedido criado");
+    state.pdvFilter = { search: "", category: "Todos" };
     renderPdv();
   });
 }
 
+// ─── MODALS ──────────────────────────────────────────────────────────────────
 function promptCustomerName() {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -275,15 +419,42 @@ function promptCustomerName() {
     document.body.appendChild(backdrop);
     const input = backdrop.querySelector("#customer-name-input");
     input.focus();
-    const close = (val) => {
-      backdrop.remove();
-      resolve(val);
-    };
+    const close = (val) => { backdrop.remove(); resolve(val); };
     backdrop.querySelector("#confirm-customer").addEventListener("click", () => close(input.value.trim()));
     backdrop.querySelector("#cancel-customer").addEventListener("click", () => close(null));
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") close(input.value.trim());
-    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") close(input.value.trim()); });
+  });
+}
+
+function promptQuantity(productName) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.innerHTML = `
+      <div class="modal" style="max-width:320px;">
+        <h3>Quantidade</h3>
+        <p style="color:var(--text-muted);margin:0 0 12px;">${escapeHtml(productName || "Produto")}</p>
+        <div class="qty-modal-row">
+          <button type="button" class="btn btn-secondary btn-sm" id="qty-dec">−</button>
+          <input type="number" id="qty-input" min="1" step="1" value="1" style="width:80px;text-align:center;font-size:1.2rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="qty-inc">+</button>
+        </div>
+        <div class="actions" style="margin-top:18px">
+          <button type="button" class="btn btn-primary" id="confirm-qty">Adicionar</button>
+          <button type="button" class="btn btn-secondary" id="cancel-qty">Cancelar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const input = backdrop.querySelector("#qty-input");
+    input.focus();
+    input.select();
+    const close = (val) => { backdrop.remove(); resolve(val); };
+    backdrop.querySelector("#qty-dec").addEventListener("click", () => { input.value = Math.max(1, Number(input.value) - 1); });
+    backdrop.querySelector("#qty-inc").addEventListener("click", () => { input.value = Number(input.value) + 1; });
+    backdrop.querySelector("#confirm-qty").addEventListener("click", () => close(Number(input.value)));
+    backdrop.querySelector("#cancel-qty").addEventListener("click", () => close(null));
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") close(Number(input.value)); });
   });
 }
 
@@ -305,37 +476,50 @@ function promptUserPassword() {
     document.body.appendChild(backdrop);
     const input = backdrop.querySelector("#user-password-input");
     input.focus();
-    const close = (val) => {
-      backdrop.remove();
-      resolve(val);
-    };
+    const close = (val) => { backdrop.remove(); resolve(val); };
     backdrop.querySelector("#confirm-user-pwd").addEventListener("click", () => close(input.value));
     backdrop.querySelector("#cancel-user-pwd").addEventListener("click", () => close(null));
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") close(input.value);
-    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") close(input.value); });
   });
 }
 
+// ─── CART ────────────────────────────────────────────────────────────────────
 function cartItemHtml(orderId, item) {
   return `
     <div class="cart-item" data-item-id="${item.id}">
-      <div>
+      <div style="flex:1;">
         <strong>${escapeHtml(item.product_name)}</strong>
         <div class="meta">${formatMoney(item.price)} · Subtotal ${formatMoney(item.subtotal)}</div>
         <div class="qty-controls">
           <button type="button" data-action="dec" data-order="${orderId}" data-item="${item.id}">−</button>
-          <span>${item.quantity}</span>
+          <input type="number" class="qty-inline" data-action="set" data-order="${orderId}" data-item="${item.id}" value="${item.quantity}" min="1" style="width:52px;text-align:center;">
           <button type="button" data-action="inc" data-order="${orderId}" data-item="${item.id}">+</button>
-          <button type="button" data-action="remove" data-order="${orderId}" data-item="${item.id}">🗑️</button>
+          <button type="button" data-action="remove" data-order="${orderId}" data-item="${item.id}" style="margin-left:4px;color:var(--danger);">🗑️</button>
         </div>
       </div>
     </div>
   `;
 }
 
+let _qtyDebounceTimers = {};
+
 function bindCartActions(orderId) {
   document.querySelectorAll("[data-action]").forEach((btn) => {
+    if (btn.dataset.action === "set") {
+      // inline qty input with debounce
+      btn.addEventListener("change", async () => {
+        const itemId = Number(btn.dataset.item);
+        const qty = Math.max(1, Number(btn.value));
+        btn.value = qty;
+        clearTimeout(_qtyDebounceTimers[itemId]);
+        _qtyDebounceTimers[itemId] = setTimeout(async () => {
+          await withError(() => endpoints.updateItem(orderId, itemId, { quantity: qty }));
+          renderPdv();
+        }, 400);
+      });
+      return;
+    }
+
     btn.addEventListener("click", async () => {
       const itemId = Number(btn.dataset.item);
       const order = await withError(() => endpoints.getOrder(orderId));
@@ -363,28 +547,30 @@ function bindCartActions(orderId) {
   });
 }
 
+// ─── CHECKOUT ────────────────────────────────────────────────────────────────
 function openCheckoutModal(order) {
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
   document.body.appendChild(backdrop);
-  
+
   let payments = [];
-  
+
   const render = () => {
     const totalReceived = payments.reduce((acc, p) => acc + p.amount, 0);
     const remaining = Math.max(0, order.total - totalReceived);
-    
+
     backdrop.innerHTML = `
       <div class="modal">
         <h3>Finalizar venda</h3>
         <p>Total do Pedido: <strong>${formatMoney(order.total)}</strong></p>
-        
+        ${order.notes ? `<p style="color:var(--text-muted);font-size:0.9rem;">📝 ${escapeHtml(order.notes)}</p>` : ""}
+
         <div style="margin-bottom: 15px;">
           ${payments.map((p, idx) => `
             <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-              <span>${p.method}</span>
+              <span>${formatPaymentMethod(p.method)}</span>
               <span>
-                ${formatMoney(p.amount)} 
+                ${formatMoney(p.amount)}
                 <button type="button" class="btn btn-sm btn-danger btn-remove-pay" data-idx="${idx}" style="padding:2px 6px; margin-left:5px;">×</button>
               </span>
             </div>
@@ -392,7 +578,7 @@ function openCheckoutModal(order) {
           ${payments.length ? `<hr style="margin:10px 0">` : ""}
           <p>Falta Receber: <strong style="color:var(--danger)">${formatMoney(remaining)}</strong></p>
         </div>
-        
+
         <div style="background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:15px;">
           <label style="margin-top:0">Adicionar Pagamento</label>
           <div style="display:flex; gap:8px; margin-top:5px;">
@@ -432,18 +618,17 @@ function openCheckoutModal(order) {
     });
 
     backdrop.querySelector("#cancel-checkout").addEventListener("click", () => backdrop.remove());
-    
+
     const confirmBtn = backdrop.querySelector("#confirm-checkout");
     if (!confirmBtn.disabled) {
       confirmBtn.addEventListener("click", async () => {
-        const result = await withError(() =>
-          endpoints.checkout(order.id, { payments })
-        );
+        const result = await withError(() => endpoints.checkout(order.id, { payments }));
         if (!result) return;
         backdrop.remove();
         toast(`Venda concluída! Troco: ${formatMoney(result.troco)}`, "success");
         if (state.currentOrder && state.currentOrder.id === order.id) {
-            state.currentOrder = null;
+          state.currentOrder = null;
+          state.pdvFilter = { search: "", category: "Todos" };
         }
         refreshCashBadge();
         if (state.view === "pdv") renderPdv();
@@ -451,11 +636,12 @@ function openCheckoutModal(order) {
       });
     }
   };
-  
+
   render();
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
 }
 
+// ─── ORDERS ──────────────────────────────────────────────────────────────────
 async function renderOrders() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando pedidos...</div>`;
   const orders = await withError(() => endpoints.listOrders());
@@ -484,7 +670,7 @@ async function renderOrders() {
                 <button type="button" class="btn btn-danger btn-sm" data-delete-order="${o.id}" style="background-color: #8B0000; border-color: #8B0000;">Excluir</button>
               </td>
             </tr>
-          `).join("") : `<tr><td colspan="4" class="empty-state">Nenhum pedido</td></tr>`}
+          `).join("") : `<tr><td colspan="5" class="empty-state">Nenhum pedido</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -520,16 +706,14 @@ async function renderOrders() {
   document.querySelectorAll("[data-delete-order]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const orderId = Number(btn.dataset.deleteOrder);
-      if (confirm(`Tem certeza que deseja APAGAR COMPLETAMENTE o pedido #${orderId}? Esta ação não pode ser desfeita e o pedido sumirá do sistema.`)) {
+      if (confirm(`Tem certeza que deseja APAGAR COMPLETAMENTE o pedido #${orderId}? Esta ação não pode ser desfeita.`)) {
         const password = await promptUserPassword();
         if (!password) return;
         const ok = await withError(() => endpoints.deleteOrder(orderId, password), "Pedido excluído com sucesso");
         if (ok) {
-          if (state.currentOrder && state.currentOrder.id === orderId) {
-            state.currentOrder = null;
-          }
-          await refreshCashBadge(); 
-          renderOrders(); 
+          if (state.currentOrder && state.currentOrder.id === orderId) state.currentOrder = null;
+          await refreshCashBadge();
+          renderOrders();
         }
       }
     });
@@ -542,8 +726,12 @@ async function showOrderDetail(orderId) {
   const container = document.getElementById("order-detail");
   container.innerHTML = `
     <div class="card">
-      <h3>Pedido #${order.id} - ${escapeHtml(order.customer_name || 'Cliente')} · ${order.status}</h3>
-      ${order.cancel_reason ? `<div class="alert cancel" style="margin-top: 10px; margin-bottom: 10px;"><strong>Motivo do Cancelamento:</strong> ${escapeHtml(order.cancel_reason)}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <h3 style="margin:0;">Pedido #${order.id} - ${escapeHtml(order.customer_name || "Cliente")} · ${order.status}</h3>
+        <button type="button" class="btn btn-secondary btn-sm no-print" id="btn-print-order">🖨️ Imprimir</button>
+      </div>
+      ${order.notes ? `<div class="alert info" style="margin-top:10px;">📝 <strong>Obs:</strong> ${escapeHtml(order.notes)}</div>` : ""}
+      ${order.cancel_reason ? `<div class="alert cancel" style="margin-top:10px;"><strong>Motivo do Cancelamento:</strong> ${escapeHtml(order.cancel_reason)}</div>` : ""}
       <table>
         <thead><tr><th>Produto</th><th>Qtd</th><th>Preço</th><th>Subtotal</th></tr></thead>
         <tbody>
@@ -557,9 +745,50 @@ async function showOrderDetail(orderId) {
           `).join("")}
         </tbody>
       </table>
+      ${order.discount > 0 ? `<p style="color:var(--success);">Desconto: −${formatMoney(order.discount)}</p>` : ""}
       <p><strong>Total: ${formatMoney(order.total)}</strong></p>
     </div>
   `;
+  document.getElementById("btn-print-order")?.addEventListener("click", () => printOrderReceipt(order));
+}
+
+function printOrderReceipt(order) {
+  const win = window.open("", "_blank", "width=400,height=600");
+  const items = order.items.map(i =>
+    `<tr><td>${escapeHtml(i.product_name)}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${formatMoney(i.subtotal)}</td></tr>`
+  ).join("");
+  win.document.write(`
+    <!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>Pedido #${order.id}</title>
+    <style>
+      body { font-family: monospace; font-size: 13px; padding: 16px; max-width: 300px; margin: 0 auto; }
+      h2 { text-align: center; margin: 0 0 4px; }
+      .center { text-align: center; }
+      hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 3px 2px; }
+      .total { font-weight: bold; font-size: 1.1em; }
+    </style>
+    </head><body>
+    <h2>Lar Doce Lar</h2>
+    <p class="center">Pedido #${order.id}</p>
+    <p class="center">Cliente: <strong>${escapeHtml(order.customer_name || "—")}</strong></p>
+    <hr>
+    <table>
+      <thead><tr><th style="text-align:left">Item</th><th>Qtd</th><th style="text-align:right">Total</th></tr></thead>
+      <tbody>${items}</tbody>
+    </table>
+    <hr>
+    ${order.discount > 0 ? `<p>Desconto: −${formatMoney(order.discount)}</p>` : ""}
+    <p class="total">Total: ${formatMoney(order.total)}</p>
+    ${order.notes ? `<hr><p>📝 Obs: ${escapeHtml(order.notes)}</p>` : ""}
+    <hr>
+    <p class="center">${new Date().toLocaleString("pt-BR")}</p>
+    <script>window.onload = () => { window.print(); window.close(); }<\/script>
+    </body></html>
+  `);
+  win.document.close();
 }
 
 function openCancelModal(orderId) {
@@ -587,6 +816,7 @@ function openCancelModal(orderId) {
   });
 }
 
+// ─── PRODUCTS ─────────────────────────────────────────────────────────────────
 async function renderProducts() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando produtos...</div>`;
   const products = await withError(() => endpoints.listProducts(false));
@@ -688,8 +918,7 @@ function openEditProductModal(product) {
   });
 }
 
-
-
+// ─── CASH ────────────────────────────────────────────────────────────────────
 async function renderCash() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando caixa...</div>`;
   const [status, flow] = await Promise.all([
@@ -700,7 +929,7 @@ async function renderCash() {
 
   const isAdmin = state.user.role === "admin";
   const session = status.session;
-  
+
   let report = null;
   if (status.open && isAdmin) {
     report = await withError(() => endpoints.getCashReport());
@@ -713,15 +942,14 @@ async function renderCash() {
         <p>Sessão #${session.id} · Aberto em ${formatDateTime(session.opened_at)}</p>
         <p>Valor esperado na gaveta: <strong>${formatMoney(session.expected_amount)}</strong></p>
       ` : `<p class="alert warning">Nenhuma sessão aberta no momento.</p>`}
-      
+
       ${isAdmin && status.open && report ? `
         <div style="margin: 20px 0; padding: 15px; background: #f0f7ff; border-radius: 8px; border-left: 5px solid #0066cc;">
           <h4>📊 Conferência de Valores</h4>
-          <p>Confira os totais movimentados neste turno por método de pagamento:</p>
           <ul style="list-style: none; padding: 0; margin-top: 10px;">
             ${Object.entries(report.by_method).map(([method, amount]) => `
               <li style="padding: 5px 0; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between;">
-                <strong>${method}</strong> <span>${formatMoney(amount)}</span>
+                <strong>${formatPaymentMethod(method)}</strong> <span>${formatMoney(amount)}</span>
               </li>
             `).join("")}
           </ul>
@@ -788,10 +1016,7 @@ async function renderCash() {
   document.getElementById("btn-open-cash")?.addEventListener("click", async () => {
     const opening_amount = Number(document.getElementById("open-amount").value);
     const ok = await withError(() => endpoints.openCash({ opening_amount }), "Caixa aberto");
-    if (ok) { 
-      await refreshCashBadge(); 
-      navigate("pdv"); 
-    }
+    if (ok) { await refreshCashBadge(); navigate("pdv"); }
   });
 
   document.getElementById("btn-close-cash")?.addEventListener("click", async () => {
@@ -816,6 +1041,7 @@ async function renderCash() {
   });
 }
 
+// ─── INVOICES ────────────────────────────────────────────────────────────────
 async function renderInvoices() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando Fiados...</div>`;
   const invoices = await withError(() => endpoints.listInvoices());
@@ -878,34 +1104,28 @@ async function renderInvoices() {
 function openInvoiceDetailModal(inv) {
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
-  
   let html = `
     <div class="modal" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
       <h3>Detalhes da Conta: ${escapeHtml(inv.customer_name)}</h3>
       <p>Total Devido: <strong style="color:var(--danger)">${formatMoney(inv.total)}</strong></p>
       <hr style="margin: 10px 0;">
   `;
-  
   inv.orders.forEach(o => {
     html += `
       <div style="margin-bottom: 12px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
         <strong>Pedido #${o.id} - ${formatDateTime(o.created_at)}</strong> (Subtotal: ${formatMoney(o.total)})
         <ul style="margin: 5px 0 0 20px; font-size: 0.9em; color: var(--text-muted);">
-          ${o.items.map(i => `
-            <li>${i.quantity}x ${escapeHtml(i.product_name)} - ${formatMoney(i.subtotal)}</li>
-          `).join("")}
+          ${o.items.map(i => `<li>${i.quantity}x ${escapeHtml(i.product_name)} - ${formatMoney(i.subtotal)}</li>`).join("")}
         </ul>
       </div>
     `;
   });
-
   html += `
       <div class="actions" style="margin-top:18px">
         <button type="button" class="btn btn-secondary" id="close-detail">Fechar</button>
       </div>
     </div>
   `;
-  
   backdrop.innerHTML = html;
   document.body.appendChild(backdrop);
   backdrop.querySelector("#close-detail").addEventListener("click", () => backdrop.remove());
@@ -932,19 +1152,16 @@ function openPayInvoiceModal(customerName, total) {
     </div>
   `;
   document.body.appendChild(backdrop);
-
   const close = () => backdrop.remove();
   backdrop.querySelector("#cancel-pay").addEventListener("click", close);
   backdrop.querySelector("#confirm-pay").addEventListener("click", async () => {
     const method = backdrop.querySelector("#invoice-pay-method").value;
     const ok = await withError(() => endpoints.payInvoice(customerName, { payment_method: method }), "Conta quitada com sucesso!");
-    if (ok) {
-      close();
-      renderInvoices();
-    }
+    if (ok) { close(); renderInvoices(); }
   });
 }
 
+// ─── REPORTS ─────────────────────────────────────────────────────────────────
 async function renderReports() {
   const today = new Date().toISOString().slice(0, 10);
   els.pageContent.innerHTML = `
@@ -981,13 +1198,13 @@ async function renderReports() {
     const type = document.getElementById("report-type").value;
     const startDate = document.getElementById("start-date").value;
     const endDate = document.getElementById("end-date").value;
-    
+
     if (type === "period") {
       const report = await withError(() => endpoints.periodReport(startDate, endDate));
       if (!report) return;
       const methods = Object.entries(report.by_method || {})
         .map(([k, v]) => `<li style="display: flex; justify-content: space-between; gap: 8px;"><span>${formatPaymentMethod(k)}</span><span style="text-align: right; word-break: break-all;">${formatMoney(v)}</span></li>`).join("");
-        
+
       document.getElementById("report-result").innerHTML = `
         <div class="report-receipt">
           <div class="receipt-header">
@@ -1005,7 +1222,7 @@ async function renderReports() {
     } else {
       const products = await withError(() => endpoints.productsReport(startDate, endDate));
       if (!products) return;
-      
+
       const totalRev = products.reduce((acc, p) => acc + p.total, 0);
       const totalQty = products.reduce((acc, p) => acc + p.quantity, 0);
 
@@ -1047,6 +1264,7 @@ async function renderReports() {
   loadReport();
 }
 
+// ─── USERS ───────────────────────────────────────────────────────────────────
 async function renderUsers() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando usuários...</div>`;
   const users = await withError(() => endpoints.listUsers());
@@ -1112,12 +1330,9 @@ async function renderUsers() {
   });
 }
 
+// ─── UTILS ───────────────────────────────────────────────────────────────────
 function statusBadge(status) {
-  const map = {
-    ABERTO: "open",
-    FECHADO: "closed",
-    CANCELADO: "cancel",
-  };
+  const map = { ABERTO: "open", FECHADO: "closed", CANCELADO: "cancel" };
   return `<span class="badge ${map[status] || ""}">${status}</span>`;
 }
 
@@ -1133,6 +1348,7 @@ function escapeAttr(text) {
   return escapeHtml(text).replaceAll("'", "&#39;");
 }
 
+// ─── INIT ────────────────────────────────────────────────────────────────────
 async function init() {
   const setup = await endpoints.setup().catch(() => ({ needs_setup: false }));
   if (setup.needs_setup) {

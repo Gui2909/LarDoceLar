@@ -52,10 +52,13 @@ export const endpoints = {
   me: () => api("/auth/me"),
   createUser: (body) => api("/users", { method: "POST", body: JSON.stringify(body) }),
   listUsers: () => api("/users"),
+  deleteUser: (userId, password) => api(`/users/${userId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
   listProducts: (onlyActive = true) => api(`/products?only_active=${onlyActive}`),
   createProduct: (body) => api("/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id, body) => api(`/products/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deactivateProduct: (id) => api(`/products/${id}/deactivate`, { method: "POST" }),
+  deleteProduct: (productId, password) => api(`/products/${productId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
+  dashboard: () => api("/dashboard"),
   createOrder: (body) => api("/orders", { method: "POST", body: JSON.stringify(body) }),
   listOrders: (status) => api(status ? `/orders?status=${status}` : "/orders"),
   getOrder: (id) => api(`/orders/${id}`),
@@ -67,13 +70,15 @@ export const endpoints = {
     api(`/orders/${orderId}/items/${itemId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
   checkout: (orderId, body) =>
     api(`/orders/${orderId}/checkout`, { method: "POST", body: JSON.stringify(body) }),
-  listInvoices: () => api("/invoices"),
-  payInvoice: (customerName, body) => api(`/invoices/${encodeURIComponent(customerName)}/pay`, { method: "POST", body: JSON.stringify(body) }),
   cancelOrder: (orderId, body) =>
     api(`/orders/${orderId}/cancel`, { method: "POST", body: JSON.stringify(body) }),
   deleteOrder: (orderId, password) => api(`/orders/${orderId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
-  deleteProduct: (productId, password) => api(`/products/${productId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
-  deleteUser: (userId, password) => api(`/users/${userId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
+  setDiscount: (orderId, discount) =>
+    api(`/orders/${orderId}/discount`, { method: "PUT", body: JSON.stringify({ discount }) }),
+  setNotes: (orderId, notes) =>
+    api(`/orders/${orderId}/notes`, { method: "PUT", body: JSON.stringify({ notes }) }),
+  listInvoices: () => api("/invoices"),
+  payInvoice: (customerName, body) => api(`/invoices/${encodeURIComponent(customerName)}/pay`, { method: "POST", body: JSON.stringify(body) }),
   cashStatus: () => api("/cash/status"),
   openCash: (body) => api("/cash/open", { method: "POST", body: JSON.stringify(body) }),
   closeCash: (body) => api("/cash/close", { method: "POST", body: JSON.stringify(body) }),

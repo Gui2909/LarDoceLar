@@ -176,6 +176,12 @@ class AuditRequest(BaseModel):
 class UserAuthRequest(BaseModel):
     password: str = Field(..., min_length=1)
 
+class OrderDiscountRequest(BaseModel):
+    discount: float = Field(ge=0)
+
+class OrderNotesRequest(BaseModel):
+    notes: str = Field(max_length=500)
+
 @app.get("/users")
 def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_roles(current_user, {"admin"})
@@ -405,6 +411,8 @@ def get_order(
         "customer_name": current.customer_name,
         "status": current.status,
         "total": current.total,
+        "discount": current.discount or 0,
+        "notes": current.notes or "",
         "items": items_data,
         "cancel_reason": cancel_reason,
     }
@@ -533,7 +541,10 @@ def checkout_order(
     if session is None:
         raise HTTPException(status_code=400, detail="Caixa fechado. Abra o caixa antes do checkout")
 
-    total = recalculate_order_total(db, order_id)
+    base_total = recalculate_order_total(db, order_id)
+    discount = float(current_order.discount or 0)
+    total = max(0.0, round(base_total - discount, 2))
+    current_order.total = total
     total_received = sum(p.amount for p in data.payments)
     
     if round(total_received, 2) < round(total, 2):
@@ -640,6 +651,85 @@ def delete_order(
     
     db.commit()
     return {"message": "Pedido excluido"}
+
+
+@app.get("/dashboard")
+def dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin", "cashier"})
+    today = date.today()
+    session = get_open_cash_session(db)
+
+    # Pedidos de hoje
+    orders_today = db.query(Order).filter(
+        func.date(Order.created_at) == today
+    ).all()
+
+    closed_today = [o for o in orders_today if o.status == "FECHADO"]
+    open_now = [o for o in orders_today if o.status == "ABERTO"]
+    total_today = sum(o.total for o in closed_today)
+
+    # Fiado pendente total
+    pending_invoices = db.query(Order).filter(
+        Order.payment_status == "PENDENTE",
+        Order.payment_method == "FATURADO"
+    ).all()
+    total_fiado = sum(o.total for o in pending_invoices)
+
+    # Caixa
+    cash_balance = None
+    if session:
+        movements = db.query(CashFlow).filter(CashFlow.cash_session_id == session.id).all()
+        cash_balance = session.opening_amount + sum(
+            m.amount for m in movements if m.type == "ENTRADA"
+        ) - sum(
+            abs(m.amount) for m in movements if m.type in ["SANGRIA", "SAIDA", "RETIRADA"]
+        )
+
+    return {
+        "total_today": total_today,
+        "orders_closed_today": len(closed_today),
+        "orders_open_now": len(open_now),
+        "total_fiado_pendente": total_fiado,
+        "cash_open": session is not None,
+        "cash_balance": cash_balance,
+    }
+
+
+@app.put("/orders/{order_id}/discount")
+def set_discount(
+    order_id: int,
+    data: OrderDiscountRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin", "cashier"})
+    current_order = db.query(Order).filter(Order.id == order_id).first()
+    if current_order is None:
+        raise HTTPException(status_code=404, detail="Pedido nao encontrado")
+    if current_order.status != "ABERTO":
+        raise HTTPException(status_code=400, detail="Pedido nao esta aberto")
+    current_order.discount = data.discount
+    db.commit()
+    return {"message": "Desconto aplicado", "discount": data.discount}
+
+
+@app.put("/orders/{order_id}/notes")
+def set_notes(
+    order_id: int,
+    data: OrderNotesRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin", "cashier"})
+    current_order = db.query(Order).filter(Order.id == order_id).first()
+    if current_order is None:
+        raise HTTPException(status_code=404, detail="Pedido nao encontrado")
+    current_order.notes = data.notes
+    db.commit()
+    return {"message": "Observacao salva"}
 
 
 @app.get("/cash/status")
