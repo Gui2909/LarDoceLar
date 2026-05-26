@@ -737,6 +737,18 @@ def print_order(
     ticket = "\n".join(lines)
     errors = []
     
+    # Method 0: Direct TCP Network Socket to Printer IP (192.168.5.98:9100)
+    # Since it is a network printer, sending directly to its raw port 9100 is extremely reliable.
+    try:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(2.0)
+            s.connect(("192.168.5.98", 9100))
+            s.sendall(ticket.encode("cp860", errors="ignore"))
+        return {"status": "success", "method": "network socket (192.168.5.98:9100)"}
+    except Exception as e:
+        errors.append(f"socket network 192.168.5.98:9100: {str(e)}")
+
     # Method 1: Direct open writing (trying lowercase 'imp' first, then uppercase 'IMP')
     for port in [r"\\localhost\imp", r"\\127.0.0.1\imp", "imp", r"\\localhost\IMP", r"\\127.0.0.1\IMP", "IMP"]:
         try:
