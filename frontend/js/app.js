@@ -818,97 +818,84 @@ function showReceiptModal(order, troco, payments) {
   });
 }
 
-async function printOrderReceipt(order, troco, payments) {
-  try {
-    toast("Imprimindo diretamente na IMP...", "info");
-    const payload = {
-      troco: parseFloat(troco || 0.0),
-      payments: (payments || []).map(p => ({ method: p.method, amount: parseFloat(p.amount) }))
-    };
-    const result = await endpoints.printOrder(order.id, payload);
-    toast(`Cupom enviado com sucesso via: ${result.method || "impressora"}`, "success");
-  } catch (err) {
-    console.error(err);
-    toast("Sem comunicação direta com a impressora. Abrindo janela de impressão...", "warning");
+function printOrderReceipt(order, troco, payments) {
+  const win = window.open("", "_blank", "width=340,height=600");
+  if (!win) { toast("Pop-up bloqueado. Permita pop-ups neste site.", "error"); return; }
 
-    const win = window.open("", "_blank", "width=340,height=600");
-    if (!win) { toast("Pop-up bloqueado. Permita pop-ups neste site.", "error"); return; }
+  const items = (order.items || []).map(i =>
+    `<tr>
+      <td>${escapeHtml(i.product_name)}</td>
+      <td style="text-align:center">${i.quantity}</td>
+      <td style="text-align:right">${formatMoney(i.subtotal)}</td>
+    </tr>`
+  ).join("");
 
-    const items = (order.items || []).map(i =>
-      `<tr>
-        <td>${escapeHtml(i.product_name)}</td>
-        <td style="text-align:center">${i.quantity}</td>
-        <td style="text-align:right">${formatMoney(i.subtotal)}</td>
-      </tr>`
-    ).join("");
+  const payLines = (payments || []).map(p =>
+    `<tr><td>${formatPaymentMethod(p.method)}</td><td style="text-align:right">${formatMoney(p.amount)}</td></tr>`
+  ).join("");
 
-    const payLines = (payments || []).map(p =>
-      `<tr><td>${formatPaymentMethod(p.method)}</td><td style="text-align:right">${formatMoney(p.amount)}</td></tr>`
-    ).join("");
+  const subtotal = (order.items || []).reduce((s, i) => s + i.subtotal, 0);
+  const discount = order.discount || 0;
+  const now = new Date().toLocaleString("pt-BR");
 
-    const subtotal = (order.items || []).reduce((s, i) => s + i.subtotal, 0);
-    const discount = order.discount || 0;
-    const now = new Date().toLocaleString("pt-BR");
-
-    win.document.write(`<!DOCTYPE html><html><head>
-    <meta charset="UTF-8">
-    <title>Cupom #${order.id}</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      @page { margin: 4mm; size: 80mm auto; }
-      body {
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 11px;
-        width: 72mm;
-        color: #000;
-        background: #fff;
-      }
-      .center { text-align: center; }
-      .right  { text-align: right; }
-      .bold   { font-weight: bold; }
-      .big    { font-size: 14px; font-weight: bold; }
-      .line   { border-top: 1px dashed #000; margin: 4px 0; }
-      table   { width: 100%; border-collapse: collapse; }
-      td      { padding: 2px 1px; vertical-align: top; }
-      th      { padding: 2px 1px; border-bottom: 1px dashed #000; text-align: left; }
-      th:last-child, td:last-child { text-align: right; }
-      th:nth-child(2), td:nth-child(2) { text-align: center; }
-      .total-row td { font-weight: bold; font-size: 13px; padding-top: 4px; }
-      @media print {
-        body { width: 72mm; }
-        .no-print { display: none; }
-      }
-    </style>
-  </head><body>
-    <div class="center big" style="margin-bottom:2px;">LAR DOCE LAR</div>
-    <div class="center" style="font-size:10px;margin-bottom:2px;">Cupom não fiscal</div>
-    <div class="line"></div>
-    <div>Pedido: <span class="bold">#${order.id}</span></div>
-    <div>Cliente: <span class="bold">${escapeHtml(order.customer_name || "—")}</span></div>
-    <div>Data: ${now}</div>
-    <div class="line"></div>
-    <table>
-      <thead><tr><th>Item</th><th>Qtd</th><th>Total</th></tr></thead>
-      <tbody>${items}</tbody>
-    </table>
-    <div class="line"></div>
-    ${discount > 0 ? `<table><tr><td>Subtotal</td><td class="right">${formatMoney(subtotal)}</td></tr><tr><td>Desconto</td><td class="right">−${formatMoney(discount)}</td></tr></table>` : ""}
-    <table><tr class="total-row"><td>TOTAL</td><td class="right">${formatMoney(order.total)}</td></tr></table>
-    <div class="line"></div>
-    <div style="margin-bottom:2px;font-size:10px;">Pagamento:</div>
-    <table>${payLines}</table>
-    ${(troco > 0) ? `<div class="bold" style="margin-top:2px;">Troco: ${formatMoney(troco)}</div>` : ""}
-    ${order.notes ? `<div class="line"></div><div style="font-size:10px;">Obs: ${escapeHtml(order.notes)}</div>` : ""}
-    <div class="line"></div>
-    <div class="center" style="font-size:10px;">Obrigado pela preferência!</div>
-    <div class="center no-print" style="margin-top:12px;">
-      <button onclick="window.print();" style="padding:6px 16px;font-size:12px;cursor:pointer;">🖨️ Imprimir</button>
-      <button onclick="window.close();" style="padding:6px 16px;font-size:12px;cursor:pointer;margin-left:6px;">✕ Fechar</button>
-    </div>
-    <script>window.onload = function() { window.print(); }<\/script>
-  </body></html>`);
-    win.document.close();
-  }
+  win.document.write(`<!DOCTYPE html><html><head>
+  <meta charset="UTF-8">
+  <title>Cupom #${order.id}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { margin: 4mm; size: 80mm auto; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      width: 72mm;
+      color: #000;
+      background: #fff;
+    }
+    .center { text-align: center; }
+    .right  { text-align: right; }
+    .bold   { font-weight: bold; }
+    .big    { font-size: 14px; font-weight: bold; }
+    .line   { border-top: 1px dashed #000; margin: 4px 0; }
+    table   { width: 100%; border-collapse: collapse; }
+    td      { padding: 2px 1px; vertical-align: top; }
+    th      { padding: 2px 1px; border-bottom: 1px dashed #000; text-align: left; }
+    th:last-child, td:last-child { text-align: right; }
+    th:nth-child(2), td:nth-child(2) { text-align: center; }
+    .total-row td { font-weight: bold; font-size: 13px; padding-top: 4px; }
+    @media print {
+      body { width: 72mm; }
+      .no-print { display: none; }
+    }
+  </style>
+</head><body>
+  <div class="center big" style="margin-bottom:2px;">LAR DOCE LAR</div>
+  <div class="center" style="font-size:10px;margin-bottom:2px;">Cupom não fiscal</div>
+  <div class="line"></div>
+  <div>Pedido: <span class="bold">#${order.id}</span></div>
+  <div>Cliente: <span class="bold">${escapeHtml(order.customer_name || "—")}</span></div>
+  <div>Data: ${now}</div>
+  <div class="line"></div>
+  <table>
+    <thead><tr><th>Item</th><th>Qtd</th><th>Total</th></tr></thead>
+    <tbody>${items}</tbody>
+  </table>
+  <div class="line"></div>
+  ${discount > 0 ? `<table><tr><td>Subtotal</td><td class="right">${formatMoney(subtotal)}</td></tr><tr><td>Desconto</td><td class="right">−${formatMoney(discount)}</td></tr></table>` : ""}
+  <table><tr class="total-row"><td>TOTAL</td><td class="right">${formatMoney(order.total)}</td></tr></table>
+  <div class="line"></div>
+  <div style="margin-bottom:2px;font-size:10px;">Pagamento:</div>
+  <table>${payLines}</table>
+  ${(troco > 0) ? `<div class="bold" style="margin-top:2px;">Troco: ${formatMoney(troco)}</div>` : ""}
+  ${order.notes ? `<div class="line"></div><div style="font-size:10px;">Obs: ${escapeHtml(order.notes)}</div>` : ""}
+  <div class="line"></div>
+  <div class="center" style="font-size:10px;">Obrigado pela preferência!</div>
+  <div class="center no-print" style="margin-top:12px;">
+    <button onclick="window.print();" style="padding:6px 16px;font-size:12px;cursor:pointer;">🖨️ Imprimir</button>
+    <button onclick="window.close();" style="padding:6px 16px;font-size:12px;cursor:pointer;margin-left:6px;">✕ Fechar</button>
+  </div>
+  <script>window.onload = function() { window.print(); }<\/script>
+</body></html>`);
+  win.document.close();
 }
 
 function openCancelModal(orderId) {
