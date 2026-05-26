@@ -746,7 +746,7 @@ def print_order(
     try:
         import socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2.0)
+            s.settimeout(5.0)
             s.connect(("192.168.5.98", 9100))
             s.sendall(ticket.encode("cp860", errors="ignore"))
         return {"status": "success", "method": "network socket (192.168.5.98:9100)"}

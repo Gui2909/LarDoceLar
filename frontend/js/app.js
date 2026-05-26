@@ -825,8 +825,8 @@ async function printOrderReceipt(order, troco, payments) {
       troco: parseFloat(troco || 0.0),
       payments: (payments || []).map(p => ({ method: p.method, amount: parseFloat(p.amount) }))
     };
-    await endpoints.printOrder(order.id, payload);
-    toast("Cupom enviado com sucesso para a impressora IMP!", "success");
+    const result = await endpoints.printOrder(order.id, payload);
+    toast(`Cupom enviado com sucesso via: ${result.method || "impressora"}`, "success");
   } catch (err) {
     console.error(err);
     toast("Sem comunicação direta com a impressora. Abrindo janela de impressão...", "warning");
