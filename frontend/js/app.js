@@ -365,8 +365,8 @@ async function renderPdv() {
   // Apply discount
   document.getElementById("btn-apply-discount")?.addEventListener("click", async () => {
     const d = parseFloat(document.getElementById("discount-input").value) || 0;
-    const ok = await withError(() => endpoints.setDiscount(order.id, d), "Desconto aplicado");
-    if (ok !== null) renderPdv();
+    await withError(() => endpoints.setDiscount(order.id, d), "Desconto aplicado");
+    renderPdv();
   });
 
   // Save notes

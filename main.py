@@ -29,6 +29,24 @@ def serve_frontend():
 Base.metadata.create_all(bind=engine)
 
 
+def run_migrations():
+    """Safe migrations: add columns that may not exist yet."""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        migrations = [
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount FLOAT DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes VARCHAR",
+        ]
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+run_migrations()
+
+
 TOKENS: dict[str, int] = {}
 
 
