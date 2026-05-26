@@ -663,7 +663,7 @@ async function renderOrders() {
         </thead>
         <tbody>
           ${orders.length ? orders.map((o) => `
-            <tr>
+            <tr id="order-row-${o.id}">
               <td>#${o.id}</td>
               <td>${escapeHtml(o.customer_name || "—")}</td>
               <td>${statusBadge(o.status)}</td>
@@ -682,7 +682,6 @@ async function renderOrders() {
         </tbody>
       </table>
     </div>
-    <div id="order-detail"></div>
   `;
 
   document.querySelectorAll("[data-view-order]").forEach((btn) => {
@@ -729,35 +728,62 @@ async function renderOrders() {
 }
 
 async function showOrderDetail(orderId) {
+  const existingDetailRow = document.getElementById(`order-detail-row-${orderId}`);
+  if (existingDetailRow) {
+    existingDetailRow.remove();
+    return;
+  }
+
+  // Close other open details rows to keep layout neat
+  document.querySelectorAll(".order-detail-row").forEach(r => r.remove());
+
   const order = await withError(() => endpoints.getOrder(orderId));
   if (!order) return;
-  const container = document.getElementById("order-detail");
-  container.innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-        <h3 style="margin:0;">Pedido #${order.id} - ${escapeHtml(order.customer_name || "Cliente")} · ${order.status}</h3>
-        <button type="button" class="btn btn-secondary btn-sm no-print" id="btn-print-order">🖨️ Imprimir</button>
+
+  const orderRow = document.getElementById(`order-row-${orderId}`);
+  if (!orderRow) return;
+
+  const detailRow = document.createElement("tr");
+  detailRow.id = `order-detail-row-${orderId}`;
+  detailRow.className = "order-detail-row";
+  detailRow.innerHTML = `
+    <td colspan="5" style="padding: 18px 24px; background: var(--surface-2); border-left: 5px solid var(--primary); transition: all 0.3s ease;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+        <h4 style="margin:0; font-size: 1.1rem; color: var(--text-base);">📋 Itens do Pedido #${order.id}</h4>
+        <button type="button" class="btn btn-secondary btn-sm no-print" id="btn-print-order-${order.id}">🖨️ Imprimir Cupom</button>
       </div>
-      ${order.notes ? `<div class="alert info" style="margin-top:10px;">📝 <strong>Obs:</strong> ${escapeHtml(order.notes)}</div>` : ""}
-      ${order.cancel_reason ? `<div class="alert cancel" style="margin-top:10px;"><strong>Motivo do Cancelamento:</strong> ${escapeHtml(order.cancel_reason)}</div>` : ""}
-      <table>
-        <thead><tr><th>Produto</th><th>Qtd</th><th>Preço</th><th>Subtotal</th></tr></thead>
+      ${order.notes ? `<div class="alert info" style="margin: 8px 0; padding: 10px 14px; font-size: 0.85rem; border-radius: 6px;">📝 <strong>Obs:</strong> ${escapeHtml(order.notes)}</div>` : ""}
+      ${order.cancel_reason ? `<div class="alert cancel" style="margin: 8px 0; padding: 10px 14px; font-size: 0.85rem; border-radius: 6px;"><strong>Motivo do Cancelamento:</strong> ${escapeHtml(order.cancel_reason)}</div>` : ""}
+      <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse; margin-top: 10px;">
+        <thead>
+          <tr style="border-bottom: 2px solid var(--border-color);">
+            <th style="background:none; text-align: left; padding: 6px 10px; color: var(--text-muted);">Produto</th>
+            <th style="background:none; text-align: center; padding: 6px 10px; color: var(--text-muted);">Qtd</th>
+            <th style="background:none; text-align: right; padding: 6px 10px; color: var(--text-muted);">Preço</th>
+            <th style="background:none; text-align: right; padding: 6px 10px; color: var(--text-muted);">Subtotal</th>
+          </tr>
+        </thead>
         <tbody>
           ${order.items.map((i) => `
-            <tr>
-              <td>${escapeHtml(i.product_name)}</td>
-              <td>${i.quantity}</td>
-              <td>${formatMoney(i.price)}</td>
-              <td>${formatMoney(i.subtotal)}</td>
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <td style="padding:8px 10px; text-align: left;">${escapeHtml(i.product_name)}</td>
+              <td style="padding:8px 10px; text-align: center;">${i.quantity}</td>
+              <td style="padding:8px 10px; text-align: right;">${formatMoney(i.price)}</td>
+              <td style="padding:8px 10px; text-align: right; font-weight: 500;">${formatMoney(i.subtotal)}</td>
             </tr>
           `).join("")}
         </tbody>
       </table>
-      ${order.discount > 0 ? `<p style="color:var(--success);">Desconto: −${formatMoney(order.discount)}</p>` : ""}
-      <p><strong>Total: ${formatMoney(order.total)}</strong></p>
-    </div>
+      <div style="text-align: right; margin-top: 14px; font-size: 0.95rem; line-height: 1.5;">
+        ${order.discount > 0 ? `<p style="color:var(--success); margin: 3px 0;">Desconto: −${formatMoney(order.discount)}</p>` : ""}
+        <p style="margin: 3px 0; font-size: 1.1rem;"><strong>Total: <span style="color: var(--primary);">${formatMoney(order.total)}</span></strong></p>
+      </div>
+    </td>
   `;
-  document.getElementById("btn-print-order")?.addEventListener("click", () => printOrderReceipt(order));
+
+  orderRow.parentNode.insertBefore(detailRow, orderRow.nextSibling);
+
+  document.getElementById(`btn-print-order-${order.id}`)?.addEventListener("click", () => printOrderReceipt(order));
 }
 
 function showReceiptModal(order, troco, payments) {
