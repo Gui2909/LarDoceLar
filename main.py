@@ -167,6 +167,11 @@ class CheckoutRequest(BaseModel):
     payments: list[PaymentAmount]
 
 
+class PrintRequest(BaseModel):
+    troco: float = 0.0
+    payments: list[PaymentAmount] = []
+
+
 class CashOpenRequest(BaseModel):
     opening_amount: float = Field(ge=0)
 
@@ -652,6 +657,120 @@ def cancel_order(
     )
     db.commit()
     return {"message": "Pedido cancelado"}
+
+
+@app.post("/orders/{order_id}/print")
+def print_order(
+    order_id: int,
+    data: PrintRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_roles(current_user, {"admin", "cashier"})
+    current_order = db.query(Order).filter(Order.id == order_id).first()
+    if current_order is None:
+        raise HTTPException(status_code=404, detail="Pedido nao encontrado")
+    
+    items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    
+    import subprocess
+    import tempfile
+    import os
+    from datetime import datetime
+    
+    lines = []
+    lines.append("          LAR DOCE LAR          ")
+    lines.append("        Cupom nao Fiscal        ")
+    lines.append("--------------------------------")
+    lines.append(f"Pedido: #{current_order.id}")
+    lines.append(f"Cliente: {current_order.customer_name or '—'}")
+    
+    created_val = current_order.created_at
+    if isinstance(created_val, datetime):
+        date_str = created_val.strftime("%d/%m/%Y %H:%M:%S")
+    else:
+        date_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    lines.append(f"Data: {date_str}")
+    lines.append("--------------------------------")
+    lines.append("Item              Qtd    Total  ")
+    lines.append("--------------------------------")
+    
+    for item in items:
+        name = item.product_name[:17]
+        qty = str(item.quantity)
+        price_total = f"{item.subtotal:.2f}"
+        lines.append(f"{name:<18} {qty:>3} {price_total:>9}")
+        
+    lines.append("--------------------------------")
+    
+    subtotal = sum(item.subtotal for item in items)
+    lines.append(f"Subtotal:            R$ {subtotal:>10.2f}")
+    
+    discount = float(getattr(current_order, "discount", 0.0) or 0.0)
+    if discount > 0:
+        lines.append(f"Desconto:            R$ {discount:>10.2f}")
+        
+    lines.append(f"TOTAL:               R$ {current_order.total:>10.2f}")
+    lines.append("--------------------------------")
+    
+    if data.payments:
+        lines.append("Pagamento:")
+        for p in data.payments:
+            friendly_method = p.method.replace("_", " ").lower().title()
+            lines.append(f" {friendly_method:<17}  R$ {p.amount:>10.2f}")
+    else:
+        method = current_order.payment_method or "Nao informado"
+        friendly_method = method.replace("_", " ").lower().title()
+        lines.append(f"Pagamento: {friendly_method}")
+        
+    if data.troco > 0:
+        lines.append(f"Troco:               R$ {data.troco:>10.2f}")
+        
+    if current_order.notes:
+        lines.append("--------------------------------")
+        lines.append(f"Obs: {current_order.notes}")
+        
+    lines.append("--------------------------------")
+    lines.append("    Obrigado pela preferencia!  ")
+    lines.append("\n\n\n\n\n\x1bd\x01") # ESC/POS feed/cut
+    
+    ticket = "\n".join(lines)
+    errors = []
+    
+    # Method 1: Direct open writing
+    for port in [r"\\localhost\IMP", r"\\127.0.0.1\IMP", "IMP"]:
+        try:
+            with open(port, "wb") as f:
+                f.write(ticket.encode("cp860", errors="ignore"))
+            return {"status": "success", "method": f"direct ({port})"}
+        except Exception as e:
+            errors.append(f"direct {port}: {str(e)}")
+            
+    # Method 2: Temporary file with print/copy commands
+    try:
+        temp_fd, temp_path = tempfile.mkstemp(suffix=".txt")
+        try:
+            with os.fdopen(temp_fd, 'wb') as tmp:
+                tmp.write(ticket.encode("cp860", errors="ignore"))
+            
+            for print_cmd in [
+                ["cmd", "/c", f"copy /B {temp_path} \\\\127.0.0.1\\IMP"],
+                ["cmd", "/c", f"copy /B {temp_path} \\\\localhost\\IMP"],
+                ["cmd", "/c", f"copy /B {temp_path} IMP"],
+                ["cmd", "/c", f"print /D:IMP {temp_path}"]
+            ]:
+                try:
+                    subprocess.run(print_cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    return {"status": "success", "method": f"cmd ({' '.join(print_cmd)})"}
+                except Exception as e:
+                    errors.append(f"cmd {' '.join(print_cmd)}: {str(e)}")
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    except Exception as e:
+        errors.append(f"tempfile: {str(e)}")
+        
+    raise HTTPException(status_code=500, detail=f"Erro ao imprimir na impressora 'IMP'. Verifique se ela foi compartilhada na rede com esse nome exato. Detalhes: {'; '.join(errors)}")
 
 
 @app.delete("/orders/{order_id}")

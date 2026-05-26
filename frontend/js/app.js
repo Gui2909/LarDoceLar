@@ -625,7 +625,13 @@ function openCheckoutModal(order) {
         const result = await withError(() => endpoints.checkout(order.id, { payments }));
         if (!result) return;
         backdrop.remove();
-        toast(`Venda concluída! Troco: ${formatMoney(result.troco)}`, "success");
+
+        // Fetch full order for receipt
+        const fullOrder = await endpoints.getOrder(order.id).catch(() => null);
+
+        // Show receipt prompt
+        showReceiptModal(fullOrder || order, result.troco, payments);
+
         if (state.currentOrder && state.currentOrder.id === order.id) {
           state.currentOrder = null;
           state.pdvFilter = { search: "", category: "Todos" };
@@ -752,43 +758,129 @@ async function showOrderDetail(orderId) {
   document.getElementById("btn-print-order")?.addEventListener("click", () => printOrderReceipt(order));
 }
 
-function printOrderReceipt(order) {
-  const win = window.open("", "_blank", "width=400,height=600");
-  const items = order.items.map(i =>
-    `<tr><td>${escapeHtml(i.product_name)}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${formatMoney(i.subtotal)}</td></tr>`
-  ).join("");
-  win.document.write(`
-    <!DOCTYPE html><html><head>
+function showReceiptModal(order, troco, payments) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  const printerName = localStorage.getItem("ldl_printer") || "IMP";
+  const trocoFmt = formatMoney(troco || 0);
+  backdrop.innerHTML = `
+    <div class="modal" style="max-width:380px;text-align:center;">
+      <div style="font-size:2.5rem;margin-bottom:8px;">✅</div>
+      <h3 style="margin:0 0 6px;">Venda Concluída!</h3>
+      <p style="color:var(--text-muted);margin:0 0 16px;">Troco: <strong style="color:var(--success);">${trocoFmt}</strong></p>
+      <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:18px;text-align:left;font-size:0.85rem;">
+        <div style="display:flex;justify-content:space-between;"><span>Impressora configurada:</span><strong>${escapeHtml(printerName)}</strong></div>
+        <div style="margin-top:6px;color:var(--text-muted);font-size:0.78rem;">Configure a impressora padrão do Windows para <strong>${escapeHtml(printerName)}</strong> e o cupom irá direto para ela.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button type="button" class="btn btn-primary btn-block" id="btn-print-receipt">🖨️ Imprimir Cupom</button>
+        <button type="button" class="btn btn-secondary btn-block" id="btn-skip-print">Fechar sem imprimir</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  backdrop.querySelector("#btn-print-receipt").addEventListener("click", () => {
+    backdrop.remove();
+    printOrderReceipt(order, troco, payments);
+  });
+  backdrop.querySelector("#btn-skip-print").addEventListener("click", () => {
+    backdrop.remove();
+    toast(`Venda concluída! Troco: ${trocoFmt}`, "success");
+  });
+}
+
+async function printOrderReceipt(order, troco, payments) {
+  try {
+    toast("Imprimindo diretamente na IMP...", "info");
+    const payload = {
+      troco: parseFloat(troco || 0.0),
+      payments: (payments || []).map(p => ({ method: p.method, amount: parseFloat(p.amount) }))
+    };
+    await endpoints.printOrder(order.id, payload);
+    toast("Cupom enviado com sucesso para a impressora IMP!", "success");
+  } catch (err) {
+    console.error(err);
+    toast("Sem comunicação direta com a impressora. Abrindo janela de impressão...", "warning");
+
+    const win = window.open("", "_blank", "width=340,height=600");
+    if (!win) { toast("Pop-up bloqueado. Permita pop-ups neste site.", "error"); return; }
+
+    const items = (order.items || []).map(i =>
+      `<tr>
+        <td>${escapeHtml(i.product_name)}</td>
+        <td style="text-align:center">${i.quantity}</td>
+        <td style="text-align:right">${formatMoney(i.subtotal)}</td>
+      </tr>`
+    ).join("");
+
+    const payLines = (payments || []).map(p =>
+      `<tr><td>${formatPaymentMethod(p.method)}</td><td style="text-align:right">${formatMoney(p.amount)}</td></tr>`
+    ).join("");
+
+    const subtotal = (order.items || []).reduce((s, i) => s + i.subtotal, 0);
+    const discount = order.discount || 0;
+    const now = new Date().toLocaleString("pt-BR");
+
+    win.document.write(`<!DOCTYPE html><html><head>
     <meta charset="UTF-8">
-    <title>Pedido #${order.id}</title>
+    <title>Cupom #${order.id}</title>
     <style>
-      body { font-family: monospace; font-size: 13px; padding: 16px; max-width: 300px; margin: 0 auto; }
-      h2 { text-align: center; margin: 0 0 4px; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      @page { margin: 4mm; size: 80mm auto; }
+      body {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 11px;
+        width: 72mm;
+        color: #000;
+        background: #fff;
+      }
       .center { text-align: center; }
-      hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
-      table { width: 100%; border-collapse: collapse; }
-      td { padding: 3px 2px; }
-      .total { font-weight: bold; font-size: 1.1em; }
+      .right  { text-align: right; }
+      .bold   { font-weight: bold; }
+      .big    { font-size: 14px; font-weight: bold; }
+      .line   { border-top: 1px dashed #000; margin: 4px 0; }
+      table   { width: 100%; border-collapse: collapse; }
+      td      { padding: 2px 1px; vertical-align: top; }
+      th      { padding: 2px 1px; border-bottom: 1px dashed #000; text-align: left; }
+      th:last-child, td:last-child { text-align: right; }
+      th:nth-child(2), td:nth-child(2) { text-align: center; }
+      .total-row td { font-weight: bold; font-size: 13px; padding-top: 4px; }
+      @media print {
+        body { width: 72mm; }
+        .no-print { display: none; }
+      }
     </style>
-    </head><body>
-    <h2>Lar Doce Lar</h2>
-    <p class="center">Pedido #${order.id}</p>
-    <p class="center">Cliente: <strong>${escapeHtml(order.customer_name || "—")}</strong></p>
-    <hr>
+  </head><body>
+    <div class="center big" style="margin-bottom:2px;">LAR DOCE LAR</div>
+    <div class="center" style="font-size:10px;margin-bottom:2px;">Cupom não fiscal</div>
+    <div class="line"></div>
+    <div>Pedido: <span class="bold">#${order.id}</span></div>
+    <div>Cliente: <span class="bold">${escapeHtml(order.customer_name || "—")}</span></div>
+    <div>Data: ${now}</div>
+    <div class="line"></div>
     <table>
-      <thead><tr><th style="text-align:left">Item</th><th>Qtd</th><th style="text-align:right">Total</th></tr></thead>
+      <thead><tr><th>Item</th><th>Qtd</th><th>Total</th></tr></thead>
       <tbody>${items}</tbody>
     </table>
-    <hr>
-    ${order.discount > 0 ? `<p>Desconto: −${formatMoney(order.discount)}</p>` : ""}
-    <p class="total">Total: ${formatMoney(order.total)}</p>
-    ${order.notes ? `<hr><p>📝 Obs: ${escapeHtml(order.notes)}</p>` : ""}
-    <hr>
-    <p class="center">${new Date().toLocaleString("pt-BR")}</p>
-    <script>window.onload = () => { window.print(); window.close(); }<\/script>
-    </body></html>
-  `);
-  win.document.close();
+    <div class="line"></div>
+    ${discount > 0 ? `<table><tr><td>Subtotal</td><td class="right">${formatMoney(subtotal)}</td></tr><tr><td>Desconto</td><td class="right">−${formatMoney(discount)}</td></tr></table>` : ""}
+    <table><tr class="total-row"><td>TOTAL</td><td class="right">${formatMoney(order.total)}</td></tr></table>
+    <div class="line"></div>
+    <div style="margin-bottom:2px;font-size:10px;">Pagamento:</div>
+    <table>${payLines}</table>
+    ${(troco > 0) ? `<div class="bold" style="margin-top:2px;">Troco: ${formatMoney(troco)}</div>` : ""}
+    ${order.notes ? `<div class="line"></div><div style="font-size:10px;">Obs: ${escapeHtml(order.notes)}</div>` : ""}
+    <div class="line"></div>
+    <div class="center" style="font-size:10px;">Obrigado pela preferência!</div>
+    <div class="center no-print" style="margin-top:12px;">
+      <button onclick="window.print();" style="padding:6px 16px;font-size:12px;cursor:pointer;">🖨️ Imprimir</button>
+      <button onclick="window.close();" style="padding:6px 16px;font-size:12px;cursor:pointer;margin-left:6px;">✕ Fechar</button>
+    </div>
+    <script>window.onload = function() { window.print(); }<\/script>
+  </body></html>`);
+    win.document.close();
+  }
 }
 
 function openCancelModal(orderId) {

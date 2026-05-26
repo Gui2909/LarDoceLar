@@ -73,6 +73,7 @@ export const endpoints = {
   cancelOrder: (orderId, body) =>
     api(`/orders/${orderId}/cancel`, { method: "POST", body: JSON.stringify(body) }),
   deleteOrder: (orderId, password) => api(`/orders/${orderId}`, { method: "DELETE", body: JSON.stringify({ password }) }),
+  printOrder: (orderId, body) => api(`/orders/${orderId}/print`, { method: "POST", body: JSON.stringify(body) }),
   setDiscount: (orderId, discount) =>
     api(`/orders/${orderId}/discount`, { method: "PUT", body: JSON.stringify({ discount }) }),
   setNotes: (orderId, notes) =>
