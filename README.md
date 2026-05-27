@@ -4,9 +4,16 @@ API REST de **ponto de venda (PDV)** para gestão de vendas, caixa, estoque e re
 
 ## Funcionalidades
 
+- **Dashboard interativo com resumo do dia**: 🏠 Tela inicial moderna com cards interativos de vendas do dia, pedidos fechados, pedidos abertos e total em fiado pendente. Possui efeitos de elevação visual no hover e cliques de navegação rápida direto para "Pedidos Abertos" e "Fiado".
+- **Pedidos com Desconto e Observações**: 🛒 Possibilidade de aplicar descontos em reais (R$) nos pedidos no PDV e adicionar observações/anotações personalizadas (ex: "Sem cebola", "Entrega no balcão").
+- **Busca de produtos e Filtro de Categorias no PDV**: 🔍 Barra de pesquisa em tempo real combinada com filtros rápidos do tipo chips/tags para categorias ("Todos", "Doces", "Salgados", etc.).
+- **Seleção e edição rápida de quantidade no PDV**: ➕ Mini modal ao clicar no produto para definir a quantidade a adicionar, e ajuste inline de quantidade direto no carrinho de compras.
+- **Sanfona/Acordeão dinâmico na listagem de pedidos**: 📋 Visualização imediata dos itens, quantidades, preços, desconto e totais diretamente abaixo da linha correspondente do pedido na tabela ao clicar em "Ver", com efeitos suaves de transição.
+- **Impressão de Cupom Térmico (Bobina 80mm)**: 🖨️ Sistema híbrido inteligente otimizado para bobinas térmicas (como a TANCA TP-650):
+  - **Impressão direta via Socket TCP**: Envio silencioso e instantâneo via socket de rede direto para a impressora local no IP `192.168.5.98` na porta `9100` usando comandos RAW ESC/POS, ideal para velocidade extrema ao rodar o servidor local.
+  - **Contingência no Navegador (Chrome/Nuvem)**: Abertura automática de janela otimizada no padrão do Google Chrome para impressão local rápida, garantindo compatibilidade total com a nuvem do Render.
 - **Usuários e autenticação**: cadastro de usuários com papéis `admin` e `cashier`; login que retorna um token UUID usado nas demais requisições.
 - **Produtos**: CRUD (criação e alteração restritas a admin); listagem com filtro de produtos ativos.
-- **Pedidos**: abertura de pedido, inclusão/alteração/remoção de itens, checkout com forma de pagamento e valor recebido (troco), cancelamento com motivo (admin).
 - **Caixa**: abertura e fechamento de sessão, suprimento, sangria, fluxo de caixa e integração com vendas fechadas.
 - **Estoque**: entrada, saída e ajuste de quantidade; alerta de estoque baixo; baixa automática no checkout quando há quantidade suficiente.
 - **Relatórios**: resumo diário por data (totais e agrupamento por forma de pagamento).
