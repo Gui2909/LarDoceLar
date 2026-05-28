@@ -893,9 +893,13 @@ function printOrderReceipt(order, troco, payments) {
     <button onclick="window.print();" style="padding:6px 16px;font-size:12px;cursor:pointer;">🖨️ Imprimir</button>
     <button onclick="window.close();" style="padding:6px 16px;font-size:12px;cursor:pointer;margin-left:6px;">✕ Fechar</button>
   </div>
-  <script>window.onload = function() { window.print(); }<\/script>
 </body></html>`);
   win.document.close();
+  win.focus();
+  setTimeout(() => {
+    win.print();
+    win.close();
+  }, 250);
 }
 
 function openCancelModal(orderId) {
