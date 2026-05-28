@@ -819,8 +819,18 @@ function showReceiptModal(order, troco, payments) {
 }
 
 function printOrderReceipt(order, troco, payments) {
-  const win = window.open("", "_blank", "width=340,height=600");
-  if (!win) { toast("Pop-up bloqueado. Permita pop-ups neste site.", "error"); return; }
+  const oldFrame = document.getElementById("print-iframe");
+  if (oldFrame) oldFrame.remove();
+
+  const iframe = document.createElement("iframe");
+  iframe.id = "print-iframe";
+  iframe.style.position = "absolute";
+  iframe.style.width = "0px";
+  iframe.style.height = "0px";
+  iframe.style.border = "none";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow.document;
 
   const items = (order.items || []).map(i =>
     `<tr>
@@ -838,7 +848,7 @@ function printOrderReceipt(order, troco, payments) {
   const discount = order.discount || 0;
   const now = new Date().toLocaleString("pt-BR");
 
-  win.document.write(`<!DOCTYPE html><html><head>
+  doc.write(`<!DOCTYPE html><html><head>
   <meta charset="UTF-8">
   <title>Cupom #${order.id}</title>
   <style>
@@ -862,10 +872,6 @@ function printOrderReceipt(order, troco, payments) {
     th:last-child, td:last-child { text-align: right; }
     th:nth-child(2), td:nth-child(2) { text-align: center; }
     .total-row td { font-weight: bold; font-size: 13px; padding-top: 4px; }
-    @media print {
-      body { width: 72mm; }
-      .no-print { display: none; }
-    }
   </style>
 </head><body>
   <div class="center big" style="margin-bottom:2px;">LAR DOCE LAR</div>
@@ -889,21 +895,18 @@ function printOrderReceipt(order, troco, payments) {
   ${order.notes ? `<div class="line"></div><div style="font-size:10px;">Obs: ${escapeHtml(order.notes)}</div>` : ""}
   <div class="line"></div>
   <div class="center" style="font-size:10px;">Obrigado pela preferência!</div>
-  <div class="center no-print" style="margin-top:12px;">
-    <button onclick="window.print();" style="padding:6px 16px;font-size:12px;cursor:pointer;">🖨️ Imprimir</button>
-    <button onclick="window.close();" style="padding:6px 16px;font-size:12px;cursor:pointer;margin-left:6px;">✕ Fechar</button>
-  </div>
-  <script>
-    window.addEventListener('afterprint', () => {
-      window.close();
-    });
-    setTimeout(() => {
-      window.focus();
-      window.print();
-    }, 250);
-  <\/script>
 </body></html>`);
-  win.document.close();
+
+  doc.close();
+
+  iframe.contentWindow.addEventListener('afterprint', () => {
+    iframe.remove();
+  });
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 250);
 }
 
 function openCancelModal(orderId) {
