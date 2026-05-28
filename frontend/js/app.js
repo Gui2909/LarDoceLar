@@ -853,7 +853,7 @@ function printOrderReceipt(order, troco, payments) {
   <title>Cupom #${order.id}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { margin: 4mm; size: 80mm auto; }
+    @page { margin: 4mm; }
     body {
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
