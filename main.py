@@ -26,6 +26,18 @@ def serve_frontend():
     return FileResponse("frontend/index.html")
 
 
+@app.get("/api/config")
+def serve_config():
+    import os
+    return {
+        "company_name": os.getenv("COMPANY_NAME", "LarDoceLar"),
+        "company_brand": os.getenv("COMPANY_BRAND", "Doce Lar"),
+        "company_logo": os.getenv("COMPANY_LOGO", "/static/img/logo.png"),
+        "printer_ip": os.getenv("PRINTER_IP", "192.168.5.98"),
+        "printer_port": int(os.getenv("PRINTER_PORT", "9100"))
+    }
+
+
 Base.metadata.create_all(bind=engine)
 
 

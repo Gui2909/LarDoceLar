@@ -371,6 +371,14 @@ def print_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    import os
+    PRINTER_IP = os.getenv("PRINTER_IP", "192.168.5.98")
+    try:
+        PRINTER_PORT = int(os.getenv("PRINTER_PORT", "9100"))
+    except ValueError:
+        PRINTER_PORT = 9100
+    COMPANY_NAME = os.getenv("COMPANY_NAME", "LarDoceLar")
+
     require_roles(current_user, {"admin", "cashier"})
     current_order = db.query(Order).filter(Order.id == order_id).first()
     if current_order is None:
@@ -380,7 +388,7 @@ def print_order(
 
     lines = []
     lines.append("\x1b\x40")
-    lines.append("          LAR DOCE LAR          ")
+    lines.append(f"{COMPANY_NAME.upper():^32}")
     lines.append("        Cupom nao Fiscal        ")
     lines.append("--------------------------------")
     lines.append(f"Pedido: #{current_order.id}")
@@ -452,21 +460,21 @@ def print_order(
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(5.0)
-            s.connect(("192.168.5.98", 9100))
+            s.connect((PRINTER_IP, PRINTER_PORT))
             s.sendall(ticket.encode("cp860", errors="ignore"))
         try:
             with open("print_debug.log", "a", encoding="utf-8") as f_debug:
                 f_debug.write(f"[{datetime.now()}] Method 0 (Socket TCP) SUCCESS\n")
         except Exception:
             pass
-        return {"status": "success", "method": "network socket (192.168.5.98:9100)"}
+        return {"status": "success", "method": f"network socket ({PRINTER_IP}:{PRINTER_PORT})"}
     except Exception as e:
         try:
             with open("print_debug.log", "a", encoding="utf-8") as f_debug:
                 f_debug.write(f"[{datetime.now()}] Method 0 (Socket TCP) FAILED: {str(e)}\n")
         except Exception:
             pass
-        errors.append(f"socket network 192.168.5.98:9100: {str(e)}")
+        errors.append(f"socket network {PRINTER_IP}:{PRINTER_PORT}: {str(e)}")
 
     for port in [
         r"\\localhost\imp",

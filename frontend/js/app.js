@@ -16,6 +16,23 @@ const state = {
   pdvFilter: { search: "", category: "Todos" },
 };
 
+let config = {
+  company_name: "LarDoceLar",
+  company_brand: "Doce Lar",
+  company_logo: "/static/img/logo.png"
+};
+
+function applyConfig() {
+  const loginLogo = document.getElementById("login-brand-logo");
+  if (loginLogo) loginLogo.src = config.company_logo;
+
+  const sidebarLogo = document.getElementById("sidebar-brand-logo");
+  if (sidebarLogo) sidebarLogo.src = config.company_logo;
+
+  const sidebarName = document.getElementById("sidebar-brand-name");
+  if (sidebarName) sidebarName.textContent = config.company_brand;
+}
+
 const els = {
   loginScreen: document.getElementById("login-screen"),
   appShell: document.getElementById("app-shell"),
@@ -874,7 +891,7 @@ function printOrderReceipt(order, troco, payments) {
     .total-row td { font-weight: bold; font-size: 13px; padding-top: 4px; }
   </style>
 </head><body>
-  <div class="center big" style="margin-bottom:2px;">LAR DOCE LAR</div>
+  <div class="center big" style="margin-bottom:2px;">${escapeHtml(config.company_name.toUpperCase())}</div>
   <div class="center" style="font-size:10px;margin-bottom:2px;">Cupom não fiscal</div>
   <div class="line"></div>
   <div>Pedido: <span class="bold">#${order.id}</span></div>
@@ -1468,6 +1485,12 @@ function escapeAttr(text) {
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 async function init() {
+  const cfg = await endpoints.getConfig().catch(() => null);
+  if (cfg) {
+    config = cfg;
+    applyConfig();
+  }
+
   const setup = await endpoints.setup().catch(() => ({ needs_setup: false }));
   if (setup.needs_setup) {
     showLogin(true);
