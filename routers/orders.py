@@ -459,7 +459,7 @@ def print_order(
         import socket
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(5.0)
+            s.settimeout(2.0)
             s.connect((PRINTER_IP, PRINTER_PORT))
             s.sendall(ticket.encode("cp860", errors="ignore"))
         try:
@@ -475,6 +475,34 @@ def print_order(
         except Exception:
             pass
         errors.append(f"socket network {PRINTER_IP}:{PRINTER_PORT}: {str(e)}")
+
+    try:
+        import win32print
+        printer_name = win32print.GetDefaultPrinter()
+        hPrinter = win32print.OpenPrinter(printer_name)
+        try:
+            hJob = win32print.StartDocPrinter(hPrinter, 1, (f"Pedido {order_id}", None, "RAW"))
+            try:
+                win32print.StartPagePrinter(hPrinter)
+                win32print.WritePrinter(hPrinter, ticket.encode("cp860", errors="ignore"))
+                win32print.EndPagePrinter(hPrinter)
+            finally:
+                win32print.EndDocPrinter(hPrinter)
+        finally:
+            win32print.ClosePrinter(hPrinter)
+        try:
+            with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                f_debug.write(f"[{datetime.now()}] Method win32print ({printer_name}) SUCCESS\n")
+        except Exception:
+            pass
+        return {"status": "success", "method": f"win32print ({printer_name})"}
+    except Exception as e:
+        try:
+            with open("print_debug.log", "a", encoding="utf-8") as f_debug:
+                f_debug.write(f"[{datetime.now()}] Method win32print FAILED: {str(e)}\n")
+        except Exception:
+            pass
+        errors.append(f"win32print: {str(e)}")
 
     for port in [
         r"\\localhost\imp",

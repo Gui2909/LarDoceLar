@@ -181,7 +181,6 @@ function navigate(view) {
   renderers[view]?.();
 }
 
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
 async function renderDashboard() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando...</div>`;
   const data = await withError(() => endpoints.dashboard());
@@ -232,7 +231,6 @@ async function renderDashboard() {
   document.getElementById("dash-fiado-pendente")?.addEventListener("click", () => navigate("invoices"));
 }
 
-// ─── PDV ─────────────────────────────────────────────────────────────────────
 async function renderPdv() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando PDV...</div>`;
   const [products, cash] = await Promise.all([
@@ -273,10 +271,8 @@ async function renderPdv() {
     ? `<div class="alert warning">Caixa fechado. Abra o caixa (menu Caixa) antes de finalizar vendas.</div>`
     : "";
 
-  // Build unique categories list
   const categories = ["Todos", ...new Set(products.map(p => p.category || "Sem categoria").sort())];
 
-  // Filter products
   const search = state.pdvFilter.search.toLowerCase();
   const catFilter = state.pdvFilter.category;
   const filtered = products.filter(p => {
@@ -354,13 +350,11 @@ async function renderPdv() {
     </div>
   `;
 
-  // Search filter
   document.getElementById("pdv-search").addEventListener("input", (e) => {
     state.pdvFilter.search = e.target.value;
     renderPdv();
   });
 
-  // Category chips
   document.querySelectorAll(".chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       state.pdvFilter.category = chip.dataset.cat;
@@ -368,7 +362,6 @@ async function renderPdv() {
     });
   });
 
-  // Add item with quantity modal
   document.querySelectorAll(".product-card").forEach((card) => {
     card.addEventListener("click", async () => {
       const qty = await promptQuantity(card.dataset.productName);
@@ -381,14 +374,12 @@ async function renderPdv() {
     });
   });
 
-  // Apply discount
   document.getElementById("btn-apply-discount")?.addEventListener("click", async () => {
     const d = parseFloat(document.getElementById("discount-input").value) || 0;
     await withError(() => endpoints.setDiscount(order.id, d), "Desconto aplicado");
     renderPdv();
   });
 
-  // Save notes
   document.getElementById("btn-save-notes")?.addEventListener("click", async () => {
     const notes = document.getElementById("notes-input").value.trim();
     await withError(() => endpoints.setNotes(order.id, notes), "Observação salva");
@@ -419,7 +410,6 @@ async function renderPdv() {
   });
 }
 
-// ─── MODALS ──────────────────────────────────────────────────────────────────
 function promptCustomerName() {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -502,7 +492,6 @@ function promptUserPassword() {
   });
 }
 
-// ─── CART ────────────────────────────────────────────────────────────────────
 function cartItemHtml(orderId, item) {
   return `
     <div class="cart-item" data-item-id="${item.id}">
@@ -525,7 +514,6 @@ let _qtyDebounceTimers = {};
 function bindCartActions(orderId) {
   document.querySelectorAll("[data-action]").forEach((btn) => {
     if (btn.dataset.action === "set") {
-      // inline qty input with debounce
       btn.addEventListener("change", async () => {
         const itemId = Number(btn.dataset.item);
         const qty = Math.max(1, Number(btn.value));
@@ -566,7 +554,6 @@ function bindCartActions(orderId) {
   });
 }
 
-// ─── CHECKOUT ────────────────────────────────────────────────────────────────
 function openCheckoutModal(order) {
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
@@ -645,10 +632,8 @@ function openCheckoutModal(order) {
         if (!result) return;
         backdrop.remove();
 
-        // Fetch full order for receipt
         const fullOrder = await endpoints.getOrder(order.id).catch(() => null);
 
-        // Show receipt prompt
         showReceiptModal(fullOrder || order, result.troco, payments);
 
         if (state.currentOrder && state.currentOrder.id === order.id) {
@@ -666,7 +651,6 @@ function openCheckoutModal(order) {
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
 }
 
-// ─── ORDERS ──────────────────────────────────────────────────────────────────
 async function renderOrders() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando pedidos...</div>`;
   const orders = await withError(() => endpoints.listOrders());
@@ -751,7 +735,6 @@ async function showOrderDetail(orderId) {
     return;
   }
 
-  // Close other open details rows to keep layout neat
   document.querySelectorAll(".order-detail-row").forEach(r => r.remove());
 
   const order = await withError(() => endpoints.getOrder(orderId));
@@ -806,7 +789,6 @@ async function showOrderDetail(orderId) {
 function showReceiptModal(order, troco, payments) {
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
-  const printerName = localStorage.getItem("ldl_printer") || "IMP";
   const trocoFmt = formatMoney(troco || 0);
   backdrop.innerHTML = `
     <div class="modal" style="max-width:380px;text-align:center;">
@@ -814,8 +796,8 @@ function showReceiptModal(order, troco, payments) {
       <h3 style="margin:0 0 6px;">Venda Concluída!</h3>
       <p style="color:var(--text-muted);margin:0 0 16px;">Troco: <strong style="color:var(--success);">${trocoFmt}</strong></p>
       <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:18px;text-align:left;font-size:0.85rem;">
-        <div style="display:flex;justify-content:space-between;"><span>Impressora configurada:</span><strong>${escapeHtml(printerName)}</strong></div>
-        <div style="margin-top:6px;color:var(--text-muted);font-size:0.78rem;">Configure a impressora padrão do Windows para <strong>${escapeHtml(printerName)}</strong> e o cupom irá direto para ela.</div>
+        <div style="display:flex;justify-content:space-between;"><span>Impressora ativa:</span><strong>Padrão do Sistema</strong></div>
+        <div style="margin-top:6px;color:var(--text-muted);font-size:0.78rem;">O sistema enviará o cupom diretamente para a impressora configurada como padrão no seu computador.</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <button type="button" class="btn btn-primary btn-block" id="btn-print-receipt">🖨️ Imprimir Cupom</button>
@@ -835,15 +817,30 @@ function showReceiptModal(order, troco, payments) {
   });
 }
 
-function printOrderReceipt(order, troco, payments) {
+async function printOrderReceipt(order, troco, payments) {
+  try {
+    const result = await endpoints.printOrder(order.id, {
+      troco: troco || 0,
+      payments: payments || []
+    });
+    if (result && result.status === "success") {
+      toast("Cupom impresso diretamente na impressora do sistema!", "success");
+      return;
+    }
+  } catch (err) {
+    console.warn("Falha na impressão direta. Utilizando contingência no navegador...", err);
+  }
+
   const oldFrame = document.getElementById("print-iframe");
   if (oldFrame) oldFrame.remove();
 
   const iframe = document.createElement("iframe");
   iframe.id = "print-iframe";
   iframe.style.position = "absolute";
-  iframe.style.width = "0px";
-  iframe.style.height = "0px";
+  iframe.style.left = "-9999px";
+  iframe.style.top = "-9999px";
+  iframe.style.width = "800px";
+  iframe.style.height = "600px";
   iframe.style.border = "none";
   document.body.appendChild(iframe);
 
@@ -951,7 +948,6 @@ function openCancelModal(orderId) {
   });
 }
 
-// ─── PRODUCTS ─────────────────────────────────────────────────────────────────
 async function renderProducts() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando produtos...</div>`;
   const products = await withError(() => endpoints.listProducts(false));
@@ -1053,7 +1049,6 @@ function openEditProductModal(product) {
   });
 }
 
-// ─── CASH ────────────────────────────────────────────────────────────────────
 async function renderCash() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando caixa...</div>`;
   const [status, flow] = await Promise.all([
@@ -1176,7 +1171,6 @@ async function renderCash() {
   });
 }
 
-// ─── INVOICES ────────────────────────────────────────────────────────────────
 async function renderInvoices() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando Fiados...</div>`;
   const invoices = await withError(() => endpoints.listInvoices());
@@ -1296,7 +1290,6 @@ function openPayInvoiceModal(customerName, total) {
   });
 }
 
-// ─── REPORTS ─────────────────────────────────────────────────────────────────
 async function renderReports() {
   const today = new Date().toISOString().slice(0, 10);
   els.pageContent.innerHTML = `
@@ -1399,7 +1392,6 @@ async function renderReports() {
   loadReport();
 }
 
-// ─── USERS ───────────────────────────────────────────────────────────────────
 async function renderUsers() {
   els.pageContent.innerHTML = `<div class="empty-state">Carregando usuários...</div>`;
   const users = await withError(() => endpoints.listUsers());
@@ -1465,7 +1457,6 @@ async function renderUsers() {
   });
 }
 
-// ─── UTILS ───────────────────────────────────────────────────────────────────
 function statusBadge(status) {
   const map = { ABERTO: "open", FECHADO: "closed", CANCELADO: "cancel" };
   return `<span class="badge ${map[status] || ""}">${status}</span>`;
@@ -1483,7 +1474,6 @@ function escapeAttr(text) {
   return escapeHtml(text).replaceAll("'", "&#39;");
 }
 
-// ─── INIT ────────────────────────────────────────────────────────────────────
 async function init() {
   const cfg = await endpoints.getConfig().catch(() => null);
   if (cfg) {

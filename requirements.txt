@@ -4,3 +4,4 @@ sqlalchemy>=2.0.49
 psycopg2-binary>=2.9.11
 pydantic>=2.13.0
 python-dotenv>=1.0.0
+pywin32>=306; sys_platform == 'win32'

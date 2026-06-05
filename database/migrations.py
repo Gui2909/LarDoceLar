@@ -1,7 +1,6 @@
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-# Colunas que o código atual espera mas podem faltar em bancos criados antes.
 _SCHEMA_PATCHES: list[tuple[str, str, str]] = [
     ("products", "is_active", "BOOLEAN NOT NULL DEFAULT TRUE"),
     ("orders", "status", "VARCHAR NOT NULL DEFAULT 'ABERTO'"),
